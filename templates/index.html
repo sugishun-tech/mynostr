@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Nostr Client</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/nostr-tools@1.16.0/lib/nostr.bundle.js"></script>
+</head>
+<body>
+    <div class="container">
+        <nav class="sidebar">
+            <div class="logo">Nostr Client</div>
+            <ul class="nav-menu">
+                <li id="menu-home" onclick="showPage('home')">🏠 Home</li>
+                <li id="menu-public" class="active" onclick="showPage('public')">🌍 Public</li>
+                <li id="menu-profile" onclick="if(myPubkey) openProfile(myPubkey)">👤 Profile</li>
+                <li id="menu-setting" onclick="showPage('setting')">⚙️ Setting</li>
+            </ul>
+            <div class="user-section">
+                <button id="login-btn" onclick="login()">Login (NIP-07)</button>
+                <div id="profile-area" style="display:none;" onclick="openProfile(myPubkey)">
+                    <img id="my-avatar" src="/static/default_profile.png" class="avatar-sm">
+                    <div id="my-name">Loading...</div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="content">
+            <section id="home-page" style="display:none;">
+                <div class="page-header"><h2>Home (Following)</h2></div>
+                <div class="post-form">
+                    <textarea id="post-input" placeholder="いまどうしてる？"></textarea>
+                    <div class="form-actions"><button onclick="submitPost()">Post</button></div>
+                </div>
+                <div class="refresh-area"><button class="refresh-btn" onclick="fetchTimeline('home', true)">Load New Posts</button></div>
+                <div id="home-timeline" class="timeline"></div>
+                <div class="load-more-area"><button class="refresh-btn" onclick="fetchTimeline('home', false)">Load More</button></div>
+            </section>
+
+            <section id="public-page" style="display:block;">
+                <div class="page-header"><h2>Public</h2></div>
+                <div class="refresh-area"><button class="refresh-btn" onclick="fetchTimeline('public', true)">Load New Posts</button></div>
+                <div id="public-timeline" class="timeline"></div>
+                <div class="load-more-area"><button class="refresh-btn" onclick="fetchTimeline('public', false)">Load More</button></div>
+            </section>
+
+            <section id="profile-page" style="display:none;">
+                <div class="profile-header-ui">
+                    <div class="profile-banner"></div>
+                    <div class="profile-meta">
+                        <div class="profile-top-row">
+                            <img id="profile-detail-pic" src="/static/default_profile.png" class="avatar-lg">
+                            <button id="follow-btn" style="display:none;" onclick="toggleFollow()"></button>
+                        </div>
+                        <h2 id="profile-detail-name">Name</h2>
+                        <div class="profile-ids">
+                            <span id="profile-nip05"></span>
+                            <div>
+                                <span>Npub: <span id="profile-npub" class="id-text"></span></span>
+                                <button onclick="copyText('profile-npub')">Copy</button>
+                            </div>
+                            <div>
+                                <span>Hex: <span id="profile-hex" class="id-text"></span></span>
+                                <button onclick="copyText('profile-hex')">Copy</button>
+                            </div>
+                        </div>
+                        <p id="profile-detail-bio"></p>
+                    </div>
+                </div>
+                <div class="refresh-area"><button class="refresh-btn" onclick="fetchProfilePosts(true)">Load New Posts</button></div>
+                <div id="profile-timeline" class="timeline"></div>
+                <div class="load-more-area"><button class="refresh-btn" onclick="fetchProfilePosts(false)">Load More</button></div>
+            </section>
+
+            <section id="setting-page" style="display:none;">
+                <div class="page-header"><h2>Settings (Local Only)</h2></div>
+                <div class="settings-form">
+                    <label>Relay List (1行に1URL)</label>
+                    <textarea id="relay-list" rows="5">wss://relay.damus.io
+wss://nos.lol
+wss://relay.nostr.band</textarea>
+                    <label>Mute Pubkeys (npub または hex, 1行に1つ)</label>
+                    <textarea id="mute-pubkeys" rows="5"></textarea>
+                    <label>Mute Regex (正規表現パターン)</label>
+                    <textarea id="mute-regex" rows="3"></textarea>
+                    <button class="save-btn" onclick="saveSettings()">Save Locally</button>
+                    <p class="setting-note">※これらの設定はブラウザ内にのみ保存され、外部リレーやサーバーには一切送信されません。</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="reply-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="reply-to-text" class="reply-context"></div>
+            <textarea id="modal-reply-input" placeholder="返信を書く..."></textarea>
+            <button class="post-submit-btn" onclick="submitModalReply()">Reply</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
