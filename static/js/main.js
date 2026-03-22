@@ -105,34 +105,6 @@ function connectRelays() {
     });
 }
 
-// --- プロフィール反映ロジック (ここが重要) ---
-function updateUIWithProfile(pubkey, profile) {
-    const displayName = profile.display_name || profile.name || pubkey.substring(0, 8);
-    const handleName = profile.name || ""; // handleはnameフィールド
-    const nip05 = profile.nip05 || "";
-
-    // タイムライン上の該当ユーザーの全投稿を更新
-    document.querySelectorAll(`.user-name-${pubkey}`).forEach(el => {
-        el.innerText = displayName;
-    });
-    document.querySelectorAll(`.user-handle-${pubkey}`).forEach(el => {
-        el.innerText = handleName ? `@${handleName}` : "";
-    });
-    document.querySelectorAll(`.user-pic-${pubkey}`).forEach(el => {
-        loadImage(el, profile.picture);
-    });
-    document.querySelectorAll(`.user-nip05-${pubkey}`).forEach(el => {
-        el.innerHTML = nip05 ? `<span class="verified-sm">✓</span>` : "";
-    });
-
-    // プロフィールページを開いている場合
-    if (currentProfileContext === pubkey) {
-        document.getElementById('profile-detail-name').innerText = displayName;
-        document.getElementById('profile-detail-bio').innerText = profile.about || "";
-        loadImage(document.getElementById('profile-detail-pic'), profile.picture);
-        document.getElementById('profile-nip05').innerHTML = nip05 ? `<span class="verified">✓ ${escapeHTML(nip05)}</span>` : "";
-    }
-}
 
 function fetchProfiles(pubkeys, callback) {
     const missing = pubkeys.filter(p => !eventStorage.has(p));
@@ -204,34 +176,6 @@ function fetchProfilePosts(isNew = false) {
         timelineState.profile.oldest = Math.min(timelineState.profile.oldest, event.created_at);
         displayPost(event, 'profile-timeline', isNew);
     });
-}
-
-function displayPost(event, containerId, prepend = true) {
-    if (document.getElementById(`post-${event.id}`)) return;
-    const container = document.getElementById(containerId);
-    
-    const p = eventStorage.get(event.pubkey) || {};
-    const displayName = escapeHTML(p.display_name || p.name || event.pubkey.substring(0, 8));
-    const handleName = p.name ? `@${escapeHTML(p.name)}` : "";
-
-    const html = `
-        <div class="post" id="post-${event.id}">
-            <img src="${DEFAULT_ICON}" class="post-icon user-pic-${event.pubkey}" onclick="openProfile('${event.pubkey}')">
-            <div class="post-content">
-                <div class="post-header">
-                    <span class="post-name user-name-${event.pubkey}" onclick="openProfile('${event.pubkey}')">${displayName}</span>
-                    <span class="post-id user-handle-${event.pubkey}">${handleName}</span>
-                </div>
-                <div class="post-text">${escapeHTML(event.content)}</div>
-                <div class="post-actions">
-                    <button class="action-btn" onclick="prepareReply('${event.id}','${event.pubkey}', '${escapeHTML(event.content).replace(/'/g, "\\'")}')">💬</button>
-                    <button id="like-btn-${event.id}" class="action-btn" onclick="like('${event.id}','${event.pubkey}')">❤️</button>
-                </div>
-            </div>
-        </div>`;
-    
-    container.insertAdjacentHTML(prepend ? 'afterbegin' : 'beforeend', html);
-    if (!eventStorage.has(event.pubkey)) fetchProfiles([event.pubkey], () => {});
 }
 
 // --- プロフィールページ表示 ---
@@ -319,12 +263,99 @@ async function sendNostrEvent(kind, content, tags = []) {
     }
 }
 
+// --- 画像読み込み（タイムアウトを削除） ---
 function loadImage(imgElement, src) {
-    if (!src) { imgElement.src = DEFAULT_ICON; return; }
-    imgElement.src = src;
-    let timer = setTimeout(() => { if (!imgElement.complete) imgElement.src = DEFAULT_ICON; }, 5000);
-    imgElement.onload = () => clearTimeout(timer);
-    imgElement.onerror = () => { clearTimeout(timer); imgElement.src = DEFAULT_ICON; };
+    if (!src || src.trim() === "") {
+        imgElement.src = DEFAULT_ICON;
+        return;
+    }
+
+    // 新しい画像オブジェクトを作成して読み込みを確認
+    const tempImg = new Image();
+    tempImg.src = src;
+
+    tempImg.onload = () => {
+        imgElement.src = src;
+    };
+
+    tempImg.onerror = () => {
+        console.warn("画像の読み込みに失敗しました:", src);
+        imgElement.src = DEFAULT_ICON;
+    };
+}
+
+// --- プロフィール情報をUIに反映（認証バッジの復活とアイコン同期） ---
+function updateUIWithProfile(pubkey, profile) {
+    const displayName = escapeHTML(profile.display_name || profile.name || pubkey.substring(0, 8));
+    const handleName = profile.name ? `@${escapeHTML(profile.name)}` : "";
+    const picUrl = profile.picture;
+    const nip05 = profile.nip05 || "";
+
+    // 1. タイムライン上の各要素を一括更新
+    document.querySelectorAll(`.user-pic-${pubkey}`).forEach(img => loadImage(img, picUrl));
+    document.querySelectorAll(`.user-name-${pubkey}`).forEach(el => el.innerText = displayName);
+    document.querySelectorAll(`.user-handle-${pubkey}`).forEach(el => el.innerText = handleName);
+    
+    // 認証バッジ（チェックマーク）の更新
+    document.querySelectorAll(`.user-nip05-${pubkey}`).forEach(el => {
+        el.innerHTML = nip05 ? `<span class="verified-sm" title="${escapeHTML(nip05)}">✓</span>` : "";
+    });
+
+    // 2. プロフィールページ（詳細画面）の更新
+    if (currentProfileContext === pubkey) {
+        const detailPic = document.getElementById('profile-detail-pic');
+        if (detailPic) loadImage(detailPic, picUrl);
+        
+        const detailName = document.getElementById('profile-detail-name');
+        if (detailName) detailName.innerText = displayName;
+        
+        const detailBio = document.getElementById('profile-detail-bio');
+        if (detailBio) detailBio.innerText = profile.about || "";
+
+        // プロフィール詳細の認証情報を更新
+        const detailNip05 = document.getElementById('profile-nip05');
+        if (detailNip05) {
+            detailNip05.innerHTML = nip05 ? `<span class="verified">✓ ${escapeHTML(nip05)}</span>` : "";
+        }
+    }
+}
+
+// --- 投稿の表示（NIP-05用コンテナを維持） ---
+function displayPost(event, containerId, prepend = true) {
+    if (document.getElementById(`post-${event.id}`)) return;
+    const container = document.getElementById(containerId);
+    
+    // 初回描画用のデータ取得
+    const p = eventStorage.get(event.pubkey) || {};
+    const displayName = escapeHTML(p.display_name || p.name || event.pubkey.substring(0, 8));
+    const handleName = p.name ? `@${escapeHTML(p.name)}` : "";
+    const nip05Html = p.nip05 ? `<span class="verified-sm" title="${escapeHTML(p.nip05)}">✓</span>` : "";
+
+    const html = `
+        <div class="post" id="post-${event.id}">
+            <img src="${DEFAULT_ICON}" class="post-icon user-pic-${event.pubkey}" onclick="openProfile('${event.pubkey}')">
+            <div class="post-content">
+                <div class="post-header">
+                    <span class="post-name user-name-${event.pubkey}" onclick="openProfile('${event.pubkey}')">${displayName}</span>
+                    <span class="user-nip05-${event.pubkey}">${nip05Html}</span>
+                    <span class="post-id user-handle-${event.pubkey}">${handleName}</span>
+                </div>
+                <div class="post-text">${escapeHTML(event.content)}</div>
+                <div class="post-actions">
+                    <button class="action-btn" onclick="prepareReply('${event.id}','${event.pubkey}', '${escapeHTML(event.content).replace(/'/g, "\\'")}')">💬</button>
+                    <button id="like-btn-${event.id}" class="action-btn" onclick="like('${event.id}','${event.pubkey}')">❤️</button>
+                </div>
+            </div>
+        </div>`;
+    
+    container.insertAdjacentHTML(prepend ? 'afterbegin' : 'beforeend', html);
+    
+    // プロフィールが未取得なら取得し、取得済みならUIに反映（画像含む）
+    if (!eventStorage.has(event.pubkey)) {
+        fetchProfiles([event.pubkey], () => {});
+    } else {
+        updateUIWithProfile(event.pubkey, eventStorage.get(event.pubkey));
+    }
 }
 
 function escapeHTML(str) {
