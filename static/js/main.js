@@ -24,7 +24,7 @@ window.onload = () => {
 };
 
 function loadSettings() {
-    const defaultRelays = "wss://relay.damus.io\nwss://nos.lol\nwss://relay.nostr.band";
+    const defaultRelays = "wss://relay.nostr.band\nwss://nos.lol\nwss://relay.damus.io\nwss://relay-jp.nostr.wirednet.jp\nwss://yabu.me\nwss://r.kojira.io\nwss://nrelay-jp.c-stellar.net";
     const savedRelays = localStorage.getItem('nostr_relays') || defaultRelays;
     const savedMuteKeys = localStorage.getItem('nostr_mute_pubkeys') || "";
     const savedRegex = localStorage.getItem('nostr_mute_regex') || "";
@@ -213,7 +213,6 @@ function displayPost(event, containerId, prepend = true) {
     const p = eventStorage.get(event.pubkey) || {};
     const displayName = escapeHTML(p.display_name || p.name || event.pubkey.substring(0, 8));
     const handleName = p.name ? `@${escapeHTML(p.name)}` : "";
-    const nip05Html = p.nip05 ? `<span class="verified-sm">✓</span>` : "";
 
     const html = `
         <div class="post" id="post-${event.id}">
@@ -221,13 +220,12 @@ function displayPost(event, containerId, prepend = true) {
             <div class="post-content">
                 <div class="post-header">
                     <span class="post-name user-name-${event.pubkey}" onclick="openProfile('${event.pubkey}')">${displayName}</span>
-                    <span class="user-nip05-${event.pubkey}">${nip05Html}</span>
                     <span class="post-id user-handle-${event.pubkey}">${handleName}</span>
                 </div>
                 <div class="post-text">${escapeHTML(event.content)}</div>
                 <div class="post-actions">
                     <button class="action-btn" onclick="prepareReply('${event.id}','${event.pubkey}', '${escapeHTML(event.content).replace(/'/g, "\\'")}')">💬</button>
-                    <button class="action-btn" onclick="like('${event.id}','${event.pubkey}')">❤️</button>
+                    <button id="like-btn-${event.id}" class="action-btn" onclick="like('${event.id}','${event.pubkey}')">❤️</button>
                 </div>
             </div>
         </div>`;
@@ -286,11 +284,39 @@ function updateFollowButton() {
     btn.className = isFollowing ? "following" : "";
 }
 
-// --- その他 ---
 async function sendNostrEvent(kind, content, tags = []) {
-    let event = { kind, pubkey: myPubkey, created_at: Math.floor(Date.now() / 1000), tags, content };
-    const signed = await window.nostr.signEvent(event);
-    relayConnections.forEach(ws => { if(ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["EVENT", signed])); });
+    if (!window.nostr) {
+        alert("ログイン（NIP-07拡張機能）が必要です");
+        return false;
+    }
+    
+    try {
+        let event = {
+            kind,
+            pubkey: myPubkey,
+            created_at: Math.floor(Date.now() / 1000),
+            tags,
+            content
+        };
+        
+        // 拡張機能で署名
+        const signed = await window.nostr.signEvent(event);
+        
+        // 全てのリレーに送信
+        let sendCount = 0;
+        relayConnections.forEach(ws => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(["EVENT", signed]));
+                sendCount++;
+            }
+        });
+
+        if (sendCount === 0) throw new Error("接続中のリレーがありません");
+        return true;
+    } catch (e) {
+        console.error("Event signing/sending failed:", e);
+        return false;
+    }
 }
 
 function loadImage(imgElement, src) {
@@ -324,3 +350,43 @@ function prepareReply(id, p, text) {
 }
 
 function closeModal() { document.getElementById('reply-modal').style.display = 'none'; }
+
+async function like(id, p) {
+    const btn = document.getElementById(`like-btn-${id}`);
+    
+    // すでにいいね済みの場合は連打防止
+    if (btn && btn.classList.contains('liked')) return;
+
+    const success = await sendNostrEvent(7, "+", [["e", id], ["p", p]]);
+    
+    if (success) {
+        if (btn) {
+            btn.classList.add('liked');
+            // オプション：数値をカウントアップさせる演出などもここに追加可能
+        }
+    } else {
+        alert("いいねの送信に失敗しました。拡張機能の承認を確認してください。");
+    }
+}
+
+async function submitModalReply() {
+    const input = document.getElementById('modal-reply-input');
+    const content = input.value;
+    if (!content) return;
+
+    // eタグ（イベントID）とpタグ（相手の公開鍵）を付与
+    const success = await sendNostrEvent(1, content, [
+        ["e", replyContext.id, "", "root"], 
+        ["p", replyContext.pubkey]
+    ]);
+
+    if (success) {
+        input.value = "";
+        closeModal();
+        alert("返信を送信しました");
+    } else {
+        alert("返信の送信に失敗しました");
+    }
+}
+
+

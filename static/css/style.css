@@ -73,3 +73,6 @@ button:hover { background: #1a8cd8; }
 .profile-ids button { padding: 4px 10px; font-size: 12px; background: #38444d; }
 .verified { color: #1d9bf0; font-size: 14px; font-weight: normal; }
 .verified-sm { color: #1d9bf0; font-size: 12px; margin-left: 3px; }
+.action-btn.liked {color: #f91880; text-shadow: 0 0 5px rgba(249, 24, 128, 0.3);}
+.action-btn {transition: color 0.2s, transform 0.1s;}
+.action-btn:active {transform: scale(1.2);}
