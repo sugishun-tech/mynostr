@@ -1,0 +1,102 @@
+:root {
+    --bg-color: #000000;
+    --border-color: #2f3336;
+    --text-main: #e7e9ea;
+    --text-sub: #71767b;
+    --accent: #1d9bf0;
+    --accent-hover: #1a8cd8;
+    --like-color: #f91880;
+    --hover-bg: rgba(255, 255, 255, 0.03);
+}
+
+body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+.app-container { display: flex; justify-content: center; height: 100vh; max-width: 1200px; margin: 0 auto; }
+
+/* Sidebar */
+.sidebar { width: 275px; display: flex; justify-content: flex-end; padding-right: 20px; }
+.sidebar-inner { width: 250px; display: flex; flex-direction: column; padding-top: 20px; }
+.logo { font-size: 24px; font-weight: bold; color: var(--text-main); margin-bottom: 20px; padding-left: 15px; }
+.nav-links { list-style: none; padding: 0; flex-grow: 1; margin: 0; }
+.nav-links li { padding: 15px; cursor: pointer; font-size: 20px; border-radius: 99px; transition: background 0.2s; display: inline-flex; align-items: center; width: auto; margin-bottom: 5px; }
+.nav-links li:hover { background: var(--border-color); }
+.nav-links li.active { font-weight: bold; }
+.nav-links li .icon { margin-right: 15px; }
+.hidden { display: none !important; }
+
+/* User Info (Sidebar Bottom) */
+.user-info { padding: 20px 0; margin-bottom: 20px; }
+#login-btn { width: 100%; padding: 15px; border-radius: 99px; font-size: 16px; }
+#profile-display { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 99px; cursor: pointer; transition: 0.2s; }
+#profile-display:hover { background: var(--border-color); }
+.my-info { display: flex; flex-direction: column; }
+#my-name { font-weight: bold; font-size: 15px; }
+
+/* Main Content (600px limits like Twitter) */
+.main-content { max-width: 600px; width: 100%; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; min-width: 0; }
+.right-sidebar { width: 350px; padding-left: 20px; } /* Empty for now */
+
+.sticky-controls { 
+    position: sticky; top: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(12px);
+    z-index: 10; padding: 10px 15px; border-bottom: 1px solid var(--border-color);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.header-title { font-size: 20px; font-weight: bold; }
+.control-group { display: flex; gap: 8px; }
+.btn-primary { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 99px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { background: transparent; color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 99px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.btn-secondary:hover { background: var(--border-color); }
+
+/* Feed Area */
+.feed-container { flex: 1; overflow-y: auto; }
+.feed-container::-webkit-scrollbar { width: 0; }
+
+/* Post Form */
+.post-box { padding: 15px 15px 5px 15px; border-bottom: 1px solid var(--border-color); display: flex; gap: 12px; }
+.post-input-wrapper { flex: 1; display: flex; flex-direction: column; }
+#post-input { background: transparent; border: none; color: var(--text-main); font-size: 20px; resize: none; outline: none; min-height: 50px; font-family: inherit; margin-top: 10px; }
+#post-input::placeholder { color: var(--text-sub); }
+.post-actions-row { display: flex; justify-content: flex-end; padding: 10px 0; border-top: 1px solid var(--border-color); margin-top: 10px; }
+
+/* Posts */
+.post { display: flex; gap: 12px; padding: 15px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.2s; }
+.post:hover { background: var(--hover-bg); }
+.avatar-sm { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #333; cursor: pointer; flex-shrink: 0; }
+.avatar-sm:hover { filter: brightness(0.8); }
+.post-content { flex: 1; min-width: 0; }
+.post-header { display: flex; gap: 5px; margin-bottom: 4px; align-items: center; }
+.user-name { font-weight: bold; font-size: 15px; cursor: pointer; }
+.user-name:hover { text-decoration: underline; }
+.user-id { color: var(--text-sub); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.post-text { line-height: 1.5; word-wrap: break-word; font-size: 15px; white-space: pre-wrap; }
+
+/* Hearts */
+.post-actions { margin-top: 12px; display: flex; gap: 20px; }
+.heart-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--text-sub); display: flex; align-items: center; gap: 5px; transition: 0.1s; padding: 0; }
+.heart-btn.liked { color: var(--like-color); }
+.heart-btn:hover { color: var(--like-color); }
+
+/* Profile View */
+.profile-banner { height: 200px; background-color: #333; background-size: cover; background-position: center; }
+.profile-details { padding: 15px; position: relative; border-bottom: 1px solid var(--border-color); }
+.avatar-lg { width: 130px; height: 130px; border-radius: 50%; border: 4px solid var(--bg-color); background: #333; object-fit: cover; position: absolute; top: -70px; }
+#profile-name { margin: 70px 0 0 0; font-size: 20px; font-weight: 800; }
+#profile-pubkey { font-size: 15px; margin-top: 2px; }
+#profile-about { margin-top: 12px; font-size: 15px; line-height: 1.4; white-space: pre-wrap; }
+
+/* Settings */
+.setting-content { padding: 20px; }
+.setting-item { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; font-weight: bold; }
+.setting-item textarea, .setting-item input { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); padding: 12px; border-radius: 4px; font-family: inherit; font-size: 15px; }
+.setting-item textarea:focus, .setting-item input:focus { outline: none; border-color: var(--accent); }
+
+@media (max-width: 700px) {
+    .app-container { justify-content: flex-start; }
+    .sidebar { width: 70px; padding: 0; align-items: center; }
+    .sidebar-inner { width: auto; align-items: center; }
+    .nav-links li { padding: 15px; }
+    .nav-links li .icon { margin-right: 0; }
+    .nav-links li span:not(.icon) { display: none; }
+    .logo, #login-btn, #my-name, .right-sidebar { display: none; }
+}

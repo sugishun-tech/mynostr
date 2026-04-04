@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pure Vanilla Nostr</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="nostr.bundle.js"></script>
+  </head>
+  <body>
+    <div class="app-container">
+      <nav class="sidebar">
+        <div class="sidebar-inner">
+          <div class="logo">Vanilla Nostr</div>
+          <ul class="nav-links">
+            <li id="nav-public" class="active" onclick="app.switchTab('public')"><span class="icon">🌍</span> Global</li>
+            <li id="nav-home" onclick="app.switchTab('home')"><span class="icon">🏠</span> Home</li>
+            <li id="nav-setting" onclick="app.switchTab('setting')"><span class="icon">⚙️</span> Setting</li>
+          </ul>
+          <div class="user-info">
+            <button id="login-btn" class="btn-primary" onclick="app.login()">NIP-07 Login</button>
+            <div id="profile-display" class="hidden" onclick="app.openProfile(app.myPubkey)">
+              <img id="my-pic" src="" class="avatar-sm">
+              <div class="my-info">
+                <span id="my-name"></span>
+                <span class="user-id">View Profile</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main class="main-content">
+        <header class="sticky-controls">
+          <div id="header-title" class="header-title">Global Timeline</div>
+          <div class="control-group">
+            <button class="btn-primary" onclick="app.fetchFeed('latest')">⬆ 最新</button>
+            <button class="btn-secondary" onclick="app.fetchFeed('newer')">🔼 <span class="batch-num">30</span>件</button>
+            <button class="btn-secondary" onclick="app.fetchFeed('older')">🔽 <span class="batch-num">30</span>件</button>
+          </div>
+        </header>
+
+        <div class="feed-container">
+          <section id="post-area" class="hidden">
+            <div class="post-box">
+              <img id="post-avatar" src="" class="avatar-sm hidden">
+              <div class="post-input-wrapper">
+                <textarea id="post-input" placeholder="いまどうしてる？"></textarea>
+                <div class="post-actions-row">
+                  <button class="btn-primary" onclick="app.submitPost()">Post</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div id="timeline-public" class="timeline"></div>
+          <div id="timeline-home" class="timeline hidden"></div>
+          
+          <section id="page-profile" class="hidden">
+            <div class="profile-header">
+              <div id="profile-banner" class="profile-banner"></div>
+              <div class="profile-details">
+                <img id="profile-avatar" src="" class="avatar-lg">
+                <h2 id="profile-name">Loading...</h2>
+                <div id="profile-pubkey" class="user-id"></div>
+                <p id="profile-about"></p>
+              </div>
+            </div>
+            <div id="timeline-profile" class="timeline"></div>
+          </section>
+
+          <section id="page-setting" class="hidden">
+            <div class="setting-content">
+              <h2>Settings</h2>
+              <div class="setting-item">
+                <label>Relays (1行に1つ)</label>
+                <textarea id="relay-input" rows="7"></textarea>
+              </div>
+              <div class="setting-item">
+                <label>一度に読み込む件数 (N)</label>
+                <input type="number" id="batch-input" value="30">
+              </div>
+              <button class="btn-primary" onclick="app.saveSettings()">Save & Reload</button>
+            </div>
+          </section>
+        </div>
+      </main>
+      
+      <aside class="right-sidebar"></aside>
+    </div>
+    <script src="main.js"></script>
+  </body>
+</html>
