@@ -1,16 +1,16 @@
 // 1. システム設定 (config.jsonの代替)
 const DEFAULT_CONFIG = {
   relays: [
-    "wss://relay.nostr.band/",
-    "wss://nos.lol/",
-    "wss://relay.damus.io/",
+    //"wss://relay.nostr.band/",
+    //"wss://nos.lol/",
+    //"wss://relay.damus.io/",
     "wss://relay-jp.nostr.wirednet.jp/",
     "wss://yabu.me/",
     "wss://r.kojira.io/",
     "wss://nrelay-jp.c-stellar.net/",
   ],
   batchSize: 30,
-  defaultIcon: "https://void.cat/d/H9k1GvE3z7rWqB3vY5Q2rK.webp" // 適当なデフォルトアイコン
+  defaultIcon: "default.png"
 };
 
 const app = {
