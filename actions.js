@@ -63,15 +63,3 @@ app.toggleLike = async function(id, pubkey) {
     });
   } catch(e) { console.error(e); }
 };
-
-app.copyNpub = function() {
-  if (!this.currentProfilePubkey) return;
-  let npub = this.currentProfilePubkey;
-  try {
-    if (window.NostrTools && window.NostrTools.nip19) {
-      npub = window.NostrTools.nip19.npubEncode(this.currentProfilePubkey);
-    }
-  } catch(e){}
-  
-  navigator.clipboard.writeText(npub).then(() => alert("コピーしました:\n" + npub));
-};
