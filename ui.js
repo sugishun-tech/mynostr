@@ -161,39 +161,11 @@ app.updateUIPost = function(pubkey) {
 };
 
 app.openProfile = function(pubkey) {
-  if (!pubkey) return;
-  this.currentProfilePubkey = pubkey;
-  
-  document.getElementById('profile-name').innerHTML = "Loading...";
-  document.getElementById('profile-pubkey').innerText = "";
-  document.getElementById('profile-about').innerText = "";
-  document.getElementById('profile-avatar').src = DEFAULT_CONFIG.defaultIcon;
-  document.getElementById('profile-banner').style.backgroundImage = 'none';
-  document.getElementById('timeline-profile').innerHTML = "";
-  this.state.profile = { newest: 0, oldest: Math.floor(Date.now()/1000) };
-  
-  this.switchTab('profile');
-
-  this.fetchProfile(pubkey, (p) => {
-    const pubkeyHex = pubkey.slice(0, 8) + '...';
-    let dName = p.display_name || p.name || "npub...";
-    let sName = "@" + (p.name || pubkeyHex);
-    
-    const status = this.nip05Status.get(p.nip05);
-    let badgeHtml = status === true ? ` <span class="badge">✅</span>` : (status === false ? ` <span class="badge">⚠️</span>` : "");
-    
-    document.getElementById('profile-name').innerHTML = `${this.esc(dName)}${badgeHtml}`;
-    document.getElementById('profile-pubkey').innerText = sName;
-    document.getElementById('profile-about').innerText = p.about || "";
-    if (p.picture) document.getElementById('profile-avatar').src = p.picture;
-    if (p.banner) document.getElementById('profile-banner').style.backgroundImage = `url(${this.esc(p.banner)})`;
-    
-    if (p.nip05 && status === undefined) {
-      this.verifyNip05(p.nip05, pubkey).then(() => this.openProfile(pubkey));
-    }
-  });
-
-  this.fetchFeed('older');
+  return 
+  //if (!pubkey) return;
+  //const npub = this.hexToNpub(pubkey);
+  //const url = `https://nostter.app/${npub}`;
+  //window.open(url, '_blank');
 };
 
 app.openThread = function(eventId) {
@@ -220,36 +192,6 @@ app.openThread = function(eventId) {
   this.fetchFeed('older');
 };
 
-app.openMutelist = function() {
-  if (!this.currentProfilePubkey) return;
-  document.getElementById('list-mutelist').innerHTML = "読み込み中...";
-  this.switchTab('mutelist');
-
-  this.query([{ kinds: [10000], authors: [this.currentProfilePubkey], limit: 1 }], (ev) => {
-    const mutedPubkeys = ev.tags.filter(t => t[0] === 'p').map(t => t[1]);
-    document.getElementById('list-mutelist').innerHTML = "";
-    
-    if (mutedPubkeys.length === 0) {
-      document.getElementById('list-mutelist').innerHTML = "<div style='padding: 15px;'>ミュートしているユーザーはいません。</div>";
-      return;
-    }
-
-    mutedPubkeys.forEach(pk => {
-      this.fetchProfile(pk, (p) => {
-        let name = p.display_name || p.name || "npub...";
-        const html = `
-          <div class="post" onclick="app.openProfile('${pk}')">
-            <img src="${this.esc(p.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm">
-            <div class="post-content">
-              <div class="user-name pubkey-${pk}">${this.esc(name)}</div>
-            </div>
-          </div>`;
-        document.getElementById('list-mutelist').insertAdjacentHTML('beforeend', html);
-      });
-    });
-  });
-};
-
 app.switchTab = function(tab) {
   this.activeTab = tab;
   document.querySelectorAll('.timeline, #page-setting, #post-area, #page-profile, #page-thread, #page-mutelist').forEach(el => el.classList.add('hidden'));
@@ -258,17 +200,13 @@ app.switchTab = function(tab) {
   const navEl = document.getElementById(`nav-${tab}`);
   if (navEl) navEl.classList.add('active');
 
-  const titles = { public: 'グローバル', home: 'ホーム', notifications: '通知', setting: '設定', profile: 'プロフィール', thread: 'スレッド', mutelist: 'ミュートリスト' };
+  const titles = { public: 'グローバル', home: 'ホーム', notifications: '通知', setting: '設定', thread: 'スレッド'};
   document.getElementById('header-title').innerText = titles[tab] || '';
 
-  if (tab === 'setting') document.getElementById('page-setting').classList.remove('hidden');
-  else if (tab === 'profile') {
-    document.getElementById('page-profile').classList.remove('hidden');
-    document.getElementById('timeline-profile').classList.remove('hidden');
+  if (tab === 'setting') {
+    document.getElementById('page-setting').classList.remove('hidden');
   } else if (tab === 'thread') {
     document.getElementById('page-thread').classList.remove('hidden');
-  } else if (tab === 'mutelist') {
-    document.getElementById('page-mutelist').classList.remove('hidden');
   } else {
     document.getElementById(`timeline-${tab}`).classList.remove('hidden');
     if (tab === 'home' || tab === 'public') document.getElementById('post-area').classList.remove('hidden');

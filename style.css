@@ -10,6 +10,8 @@
   --hover-bg: #f5f8fa;
 }
 
+
+
 body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); color: var(--text-main); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
 
 .app-container { display: flex; justify-content: center; height: 100vh; max-width: 1200px; margin: 0 auto; }
@@ -67,6 +69,7 @@ body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); c
 .post-time { color: var(--text-sub); font-size: 12px; margin-left: 8px;flex-shrink: 0;}
 .user-name { font-weight: bold; font-size: 15px; cursor: pointer; color: var(--text-main); }
 .user-name:hover { text-decoration: underline; }
+.user-name:hover::after {content: " ↗"; font-size: 10px; text-decoration: none; display: inline-block;}
 .user-id { color: var(--text-sub); font-size: 14px; }
 .badge { font-size: 13px; margin-left: 2px; }
 .post-text { line-height: 1.4; word-wrap: break-word; font-size: 15px; white-space: pre-wrap; margin-top: 2px; }
