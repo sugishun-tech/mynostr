@@ -31,7 +31,7 @@ app.fetchFeed = function(direction) {
   }
 
   this.query([filter], (event) => {
-    if (this.eventStorage.has(event.id) && direction !== 'latest' && direction !== 'newer') return; 
+    //if (this.eventStorage.has(event.id) && direction !== 'latest' && direction !== 'newer') return; 
     this.eventStorage.set(event.id, event);
     
     state.newest = Math.max(state.newest, event.created_at);

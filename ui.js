@@ -30,7 +30,8 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
   if (!container) return;
 
   if (ev.kind === 7 && containerId !== 'timeline-notifications') return;
-  if (document.getElementById(`post-${ev.id}`)) return; // 重複チェック
+  //if (document.getElementById(`post-${ev.id}`)) return; // 重複チェック
+  if (container.querySelector(`[data-event-id="${ev.id}"]`)) return;
 
   const profile = this.profiles.get(ev.pubkey) || {};
   const isLiked = this.likedIds.has(ev.id);
@@ -49,8 +50,8 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
 
   // --- HTML組み立て (タイムスタンプ追加) ---
   const html = `
-    <div class="post" id="post-${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${ev.id}')">
-      <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
+    <div class="post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${ev.id}')">
+      <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">\
       <div class="post-content">
         <div class="post-header">
           <div class="header-user-info" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();">
@@ -99,6 +100,7 @@ app.createHTMLElement = function(html) {
 app.renderNotification = function(ev, prepend) {
   const container = document.getElementById('timeline-notifications');
   if (!container) return;
+  if (container.querySelector(`[data-event-id="${ev.id}"]`)) return;
   
   // いいねの場合
   if (ev.kind === 7) {
@@ -113,7 +115,7 @@ app.renderNotification = function(ev, prepend) {
     let sName = "@" + (profile.name || pubkeyHex);
 
     const html = `
-      <div class="post" onclick="app.openThread('${targetId}')">
+      <div class="post" data-event-id="${ev.id}" onclick="app.openThread('${targetId}')">
         <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
         <div class="post-content">
           <div class="post-header">

@@ -57,7 +57,7 @@ app.toggleLike = async function(id, pubkey) {
     const signed = await window.nostr.signEvent(ev);
     this.broadcast(signed);
     this.likedIds.add(id);
-    document.querySelectorAll(`#post-${id} .heart-btn`).forEach(btn => {
+    document.querySelectorAll(`[data-event-id="${id}"] .heart-btn`).forEach(btn => {
       btn.innerHTML = '♥';
       btn.classList.add('liked');
     });
