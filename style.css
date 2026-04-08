@@ -62,7 +62,9 @@ body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); c
 .avatar-sm { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; background: #eee; cursor: pointer; flex-shrink: 0; }
 .avatar-sm:hover { filter: brightness(0.9); }
 .post-content { flex: 1; min-width: 0; }
-.post-header { display: flex; gap: 5px; margin-bottom: 2px; align-items: baseline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.post-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;}
+.header-user-info {display: flex; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+.post-time { color: var(--text-sub); font-size: 12px; margin-left: 8px;flex-shrink: 0;}
 .user-name { font-weight: bold; font-size: 15px; cursor: pointer; color: var(--text-main); }
 .user-name:hover { text-decoration: underline; }
 .user-id { color: var(--text-sub); font-size: 14px; }

@@ -11,20 +11,19 @@ app.updateBatchDisplay = function() {
 };
 
 
-// --- 補助関数: 時刻のフォーマット ---
 app.formatTime = function(unix) {
   const date = new Date(unix * 1000);
-  const now = new Date();
-  const diff = (now - date) / 1000;
-
-  if (diff < 60) return "今";
-  if (diff < 3600) return Math.floor(diff / 60) + "分";
-  if (diff < 86400) return Math.floor(diff / 3600) + "時間";
   
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const Y = date.getFullYear();
+  const M = String(date.getMonth() + 1).padStart(2, '0');
+  const D = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+
+  return `${Y}/${M}/${D} ${h}:${m}:${s}`;
 };
 
-// --- renderPost の修正 ---
 app.renderPost = function(ev, prepend, targetContainerId = null) {
   const containerId = targetContainerId || `timeline-${this.activeTab}`;
   const container = document.getElementById(containerId);
@@ -62,8 +61,8 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
         </div>
         <div class="post-text">${this.esc(ev.content)}</div>
         <div class="post-actions">
-           <button class="action-btn" onclick="app.openThread('${ev.id}'); event.stopPropagation();">💬</button>
-           <button class="action-btn heart-btn ${isLiked ? 'liked' : ''}" onclick="app.toggleLike('${ev.id}', '${ev.pubkey}'); event.stopPropagation();">
+          <button class="action-btn" onclick="app.openThread('${ev.id}'); event.stopPropagation();">💬</button>
+          <button class="action-btn heart-btn ${isLiked ? 'liked' : ''}" onclick="app.toggleLike('${ev.id}', '${ev.pubkey}'); event.stopPropagation();">
             ${isLiked ? '♥' : '♡'}
           </button>
         </div>
