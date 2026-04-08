@@ -10,20 +10,35 @@ app.updateBatchDisplay = function() {
   document.querySelectorAll('.batch-num').forEach(el => el.innerText = this.batchSize);
 };
 
+
+// --- 補助関数: 時刻のフォーマット ---
+app.formatTime = function(unix) {
+  const date = new Date(unix * 1000);
+  const now = new Date();
+  const diff = (now - date) / 1000;
+
+  if (diff < 60) return "今";
+  if (diff < 3600) return Math.floor(diff / 60) + "分";
+  if (diff < 86400) return Math.floor(diff / 3600) + "時間";
+  
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+// --- renderPost の修正 ---
 app.renderPost = function(ev, prepend, targetContainerId = null) {
   const containerId = targetContainerId || `timeline-${this.activeTab}`;
   const container = document.getElementById(containerId);
   if (!container) return;
 
   if (ev.kind === 7 && containerId !== 'timeline-notifications') return;
+  if (document.getElementById(`post-${ev.id}`)) return; // 重複チェック
 
   const profile = this.profiles.get(ev.pubkey) || {};
   const isLiked = this.likedIds.has(ev.id);
-  const pubkeyHex = ev.pubkey.slice(0, 8) + '...';
+  const timeStr = this.formatTime(ev.created_at);
   
-  // NIP-24 拡張メタデータに対応した名前の処理
   let dName = profile.display_name || profile.name || "npub...";
-  let sName = "@" + (profile.name || pubkeyHex);
+  let sName = "@" + (profile.name || ev.pubkey.slice(0, 8) + '...');
   
   let badgeHtml = "";
   if (profile.nip05) {
@@ -33,53 +48,53 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
     else this.verifyNip05(profile.nip05, ev.pubkey);
   }
 
-  let replyContextHtml = "";
-  const eTags = ev.tags.filter(t => t[0] === 'e');
-  if (eTags.length > 0) {
-    const replyTag = eTags.find(t => t[3] === 'reply') || eTags[eTags.length - 1];
-    const replyId = replyTag[1];
-    const parentEv = this.eventStorage.get(replyId);
-    const parentText = parentEv ? parentEv.content.replace(/\n/g, ' ') : "取得中...";
-    const parentP = parentEv ? this.profiles.get(parentEv.pubkey) : null;
-    const parentImg = parentP?.picture || DEFAULT_CONFIG.defaultIcon;
-    
-    replyContextHtml = `
-      <div class="reply-context" onclick="app.openThread('${replyId}'); event.stopPropagation();">
-        <img src="${this.esc(parentImg)}">
-        <span class="snippet">Replying to: ${this.esc(parentText)}</span>
-      </div>
-    `;
-    if (!parentEv) this.fetchSingleEvent(replyId);
-  }
-
+  // --- HTML組み立て (タイムスタンプ追加) ---
   const html = `
-    <div class="post" id="post-${ev.id}" onclick="app.openThread('${ev.id}')">
+    <div class="post" id="post-${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${ev.id}')">
       <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
       <div class="post-content">
-        <div class="post-header" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();">
-          <span class="user-name pubkey-${ev.pubkey}">${this.esc(dName)}${badgeHtml}</span>
-          <span class="user-id nip05-${ev.pubkey}">${this.esc(sName)}</span>
+        <div class="post-header">
+          <div class="header-user-info" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();">
+            <span class="user-name pubkey-${ev.pubkey}">${this.esc(dName)}${badgeHtml}</span>
+            <span class="user-id nip05-${ev.pubkey}">${this.esc(sName)}</span>
+          </div>
+          <span class="post-time" title="${new Date(ev.created_at * 1000).toLocaleString()}">· ${timeStr}</span>
         </div>
-        ${replyContextHtml}
         <div class="post-text">${this.esc(ev.content)}</div>
         <div class="post-actions">
-          <button class="action-btn" onclick="app.openThread('${ev.id}'); event.stopPropagation();">💬</button>
-          <button class="action-btn heart-btn ${isLiked ? 'liked' : ''}" onclick="app.toggleLike('${ev.id}', '${ev.pubkey}'); event.stopPropagation();">
+           <button class="action-btn" onclick="app.openThread('${ev.id}'); event.stopPropagation();">💬</button>
+           <button class="action-btn heart-btn ${isLiked ? 'liked' : ''}" onclick="app.toggleLike('${ev.id}', '${ev.pubkey}'); event.stopPropagation();">
             ${isLiked ? '♥' : '♡'}
           </button>
         </div>
       </div>
     </div>
   `;
-  
-  if (!document.getElementById(`post-${ev.id}`)) {
-    if (prepend) container.insertAdjacentHTML('afterbegin', html);
-    else container.insertAdjacentHTML('beforeend', html);
+
+  // --- 時系列ソート挿入ロジック ---
+  const children = Array.from(container.children);
+  const nextElement = children.find(child => {
+    const childTime = parseInt(child.getAttribute('data-timestamp'));
+    return ev.created_at > childTime; // 自分より古い要素を見つける
+  });
+
+  if (nextElement) {
+    container.insertBefore(this.createHTMLElement(html), nextElement);
+  } else {
+    container.insertAdjacentHTML('beforeend', html);
   }
 
+  // プロフィール取得などは既存のまま
   if (!this.profiles.has(ev.pubkey)) {
     this.fetchProfile(ev.pubkey, () => this.updateUIPost(ev.pubkey));
   }
+};
+
+// 文字列をDOM要素に変換するヘルパー
+app.createHTMLElement = function(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html.trim();
+  return div.firstChild;
 };
 
 app.renderNotification = function(ev, prepend) {
