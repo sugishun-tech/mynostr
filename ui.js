@@ -163,11 +163,9 @@ app.updateUIPost = function(pubkey) {
 };
 
 app.openProfile = function(pubkey) {
-  return 
-  //if (!pubkey) return;
-  //const npub = this.hexToNpub(pubkey);
-  //const url = `https://nostter.app/${npub}`;
-  //window.open(url, '_blank');
+  if (!pubkey) return;
+  const url = `https://sugishun-tech.github.io/mynostr_profile/?hex=${pubkey}`;
+  window.open(url, '_blank');
 };
 
 app.openThread = function(eventId) {
