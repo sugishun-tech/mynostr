@@ -23,16 +23,63 @@ app.broadcast = function(signedEvent) {
   });
 };
 
+
 app.query = function(filters, onEvent) {
-  const subId = "sub_" + Math.random().toString(36).substring(7);
-  this.subscriptions.set(subId, onEvent);
-  this.relays.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["REQ", subId, ...filters]));
-  });
-  setTimeout(() => {
-    this.relays.forEach(ws => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["CLOSE", subId]));
+  return new Promise((resolve) => {
+    const subId = "sub_" + Math.random().toString(36).substring(7);
+    const collectedEvents = []; // 収集用
+
+    this.subscriptions.set(subId, (ev) => {
+      collectedEvents.push(ev);
+      if (onEvent) onEvent(ev); // 既存の逐次描画コールバックも維持
     });
-    this.subscriptions.delete(subId);
-  }, 4000);
+
+    this.relays.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["REQ", subId, ...filters]));
+    });
+
+    setTimeout(() => {
+      this.relays.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["CLOSE", subId]));
+      });
+      this.subscriptions.delete(subId);
+      resolve(collectedEvents); // 4秒後に取得した全イベントを返す
+    }, 4000);
+  });
+};
+
+// 新設: 1件見つかった瞬間にサブスクリプションを閉じて即座にresolveする
+app.getSingleEvent = function(filters) {
+  return new Promise((resolve) => {
+    const subId = "sub_" + Math.random().toString(36).substring(7);
+    let handled = false;
+
+    const closeSub = () => {
+      this.relays.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["CLOSE", subId]));
+      });
+      this.subscriptions.delete(subId);
+    };
+
+    this.subscriptions.set(subId, (ev) => {
+      if (!handled) {
+        handled = true;
+        closeSub(); // 1件見つけたら即座に通信を打ち切る（爆速化）
+        resolve(ev);
+      }
+    });
+
+    this.relays.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["REQ", subId, ...filters]));
+    });
+
+    // 4秒待っても来なければ null で諦める
+    setTimeout(() => {
+      if (!handled) {
+        handled = true;
+        closeSub();
+        resolve(null);
+      }
+    }, 4000);
+  });
 };

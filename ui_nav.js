@@ -5,102 +5,61 @@ app.openProfile = function(pubkey) {
   window.open(`https://sugishun-tech.github.io/mynostr_profile/?hex=${pubkey}`, '_blank');
 };
 
-app.openThread = function(eventId) {
+
+app.openThread = async function(eventId) {
   this.previousTab = this.activeTab;
   this.currentThreadId = eventId;
   this.switchTab('thread');
 
-  // 1. 各コンテナの取得
-  const containerParent = document.getElementById('thread-parent-post');
-  const containerMain = document.getElementById('thread-main-post');
-  const containerReplies = document.getElementById('timeline-thread');
+  // 1. 各コンテナの取得と初期化
+  const containers = {
+    parent: document.getElementById('thread-parent-post'),
+    main: document.getElementById('thread-main-post'),
+    replies: document.getElementById('timeline-thread')
+  };
 
-  // 2. 初期化（中身を空にする）
-  [containerParent, containerMain, containerReplies].forEach(el => {
+  Object.values(containers).forEach(el => {
     if (el) {
       el.innerHTML = '';
-      // --- 原因徹底追及の修正点：hiddenを強制解除 ---
       el.classList.remove('hidden'); 
-      el.style.display = ''; // style属性で直接消されてる場合も考慮
+      el.style.display = '';
     }
   });
 
-  // 3. イベント取得（キャッシュ無視の生クエリ）
-  this.query([{ ids: [eventId] }], (ev) => {
-    // 主役を表示
-    this.renderPost(ev, false, 'thread-main-post');
+  // 2. 主役の投稿を取得 (getSingleEventで即座に取得して待つ)
+  const ev = await this.getSingleEvent([{ ids: [eventId] }]);
+  if (!ev) return; // 取得失敗時は終了
+  
+  this.renderPost(ev, false, 'thread-main-post');
 
-    // 親の取得
+  // 3. 親の取得 (非同期で走らせる)
+  const fetchParent = async () => {
     const eTags = ev.tags.filter(t => t[0] === 'e');
     if (eTags.length > 0) {
       const parentTag = eTags.find(t => t[3] === 'reply') || eTags[eTags.length - 1];
-      this.query([{ ids: [parentTag[1]] }], (pEv) => {
-        this.renderPost(pEv, false, 'thread-parent-post');
-      });
+      const pEv = await this.getSingleEvent([{ ids: [parentTag[1]] }]);
+      if (pEv) this.renderPost(pEv, false, 'thread-parent-post');
     }
+  };
 
-    // 子（リプライ）の取得
+  // 4. 子（リプライ）の取得 (複数来るので既存のqueryで逐次描画)
+  const fetchReplies = () => {
     this.query([{ kinds: [1], '#e': [ev.id] }], (childEv) => {
-      // タグの中に自分のIDがあれば子とみなす（一番確実な判定）
       const isDirectReply = childEv.tags.some(t => t[0] === 'e' && t[1] === ev.id);
-
       if (isDirectReply) {
-        // レンダリング直前にも念のためコンテナの非表示をチェック
-        if (containerReplies && containerReplies.classList.contains('hidden')) {
-          containerReplies.classList.remove('hidden');
+        if (containers.replies && containers.replies.classList.contains('hidden')) {
+          containers.replies.classList.remove('hidden');
         }
         this.renderPost(childEv, false, 'timeline-thread');
       }
     });
-  });
-};
-
-app.openThread_old = function(eventId) {
-  this.previousTab = this.activeTab;
-  this.currentThreadId = eventId;
-  this.switchTab('thread');
-
-  const containerParent = document.getElementById('thread-parent-post');
-  const containerMain = document.getElementById('thread-main-post');
-  const containerReplies = document.getElementById('timeline-thread');
-
-  containerParent.innerHTML = '';
-  containerMain.innerHTML = '';
-  containerReplies.innerHTML = '';
-
-  const renderThreadContext = (ev) => {
-    this.renderPost(ev, false, 'thread-main-post');
-
-    const eTags = ev.tags.filter(t => t[0] === 'e');
-    if (eTags.length > 0) {
-      const parentTag = eTags.find(t => t[3] === 'reply') || eTags[0];
-      this.query([{ ids: [parentTag[1]] }], (pEv) => {
-        this.renderPost(pEv, false, 'thread-parent-post');
-      });
-    }
-
-    if (this.query) {
-      this.query([{ kinds: [1], '#e': [ev.id], limit: 30 }], (childEv) => {
-        const cTags = childEv.tags.filter(t => t[0] === 'e');
-        const directReplyTag = cTags.find(t => t[3] === 'reply') || cTags[cTags.length - 1];
-        if (directReplyTag && directReplyTag[1] === ev.id) {
-          if(this.eventStorage) this.eventStorage.set(childEv.id, childEv);
-          this.renderPost(childEv, false, 'timeline-thread');
-        }
-      });
-    }
   };
 
-  const targetEv = this.eventStorage ? this.eventStorage.get(eventId) : null;
-  if (targetEv) {
-    renderThreadContext(targetEv);
-  } else {
-    this.query([{ ids: [eventId] }], (ev) => {
-      if(this.eventStorage) this.eventStorage.set(ev.id, ev);
-      renderThreadContext(ev);
-    });
-  }
+  // 親の取得と子の取得を同時にスタート
+  fetchParent();
+  fetchReplies();
 };
+
 
 app.switchTab = function(tab) {
   this.activeTab = tab;

@@ -1,14 +1,27 @@
 import { app } from './appCore.js';
 
-app.fetchProfile = function(pubkey, cb) {
-  if (this.profiles.has(pubkey)) return cb(this.profiles.get(pubkey));
-  this.query([{ kinds: [0], authors: [pubkey], limit: 1 }], (ev) => {
+app.fetchProfile = async function(pubkey, cb) {
+  // すでにキャッシュがあれば即返す
+  if (this.profiles.has(pubkey)) {
+    const p = this.profiles.get(pubkey);
+    if (cb) cb(p);
+    return p;
+  }
+  
+  // getSingleEventを使って1件取得
+  const ev = await this.getSingleEvent([{ kinds: [0], authors: [pubkey], limit: 1 }]);
+  
+  if (ev) {
     try {
       const data = JSON.parse(ev.content);
       this.profiles.set(pubkey, data);
-      cb(data);
-    } catch(e) {}
-  });
+      if (cb) cb(data); // 既存のコールバック互換性も維持
+      return data;
+    } catch(e) {
+      console.error("プロフィール解析エラー", e);
+    }
+  }
+  return null;
 };
 
 app.verifyNip05 = async function(nip05, pubkey) {
