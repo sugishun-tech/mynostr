@@ -30,11 +30,10 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
   if (!container) return;
 
   if (ev.kind === 7 && containerId !== 'timeline-notifications') return;
-  //if (document.getElementById(`post-${ev.id}`)) return; // 重複チェック
   if (container.querySelector(`[data-event-id="${ev.id}"]`)) return;
 
   const profile = this.profiles.get(ev.pubkey) || {};
-  const isLiked = this.likedIds.has(ev.id);
+  const isLiked = this.likedIds ? this.likedIds.has(ev.id) : false;
   const timeStr = this.formatTime(ev.created_at);
   
   let dName = profile.display_name || profile.name || "npub...";
@@ -48,11 +47,55 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
     else this.verifyNip05(profile.nip05, ev.pubkey);
   }
 
-  // --- HTML組み立て (タイムスタンプ追加) ---
+  // --- 💡返信をわかりやすくする機能 ---
+  let replyContextHtml = '';
+  let parentId = null;
+  const eTags = ev.tags ? ev.tags.filter(t => t[0] === 'e') : [];
+  if (eTags.length > 0) {
+    // リプライマーカーがあるもの、なければ最後のeタグを親とする
+    const replyTag = eTags.find(t => t.length > 3 && t[3] === 'reply') || eTags[eTags.length - 1];
+    parentId = replyTag[1];
+  }
+
+  if (parentId && containerId !== 'thread-parent-post') {
+    const parentEv = this.eventStorage ? this.eventStorage.get(parentId) : null;
+    if (parentEv) {
+      const pProfile = this.profiles.get(parentEv.pubkey) || {};
+      const pName = pProfile.display_name || pProfile.name || "npub...";
+      const snippet = parentEv.content.replace(/\n/g, ' ').substring(0, 40) + '...';
+      replyContextHtml = `
+        <div class="reply-context preview" onclick="if(!window.getSelection().toString()) { app.openThread('${parentId}'); } event.stopPropagation();">
+          <img src="${this.esc(pProfile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-tiny" loading="lazy">
+          <span class="snippet">${this.esc(pName)} - ${this.esc(snippet)}</span>
+        </div>
+      `;
+    } else {
+      // 親イベント未取得の場合はプレースホルダーを表示
+      replyContextHtml = `
+        <div class="reply-context preview" id="reply-preview-${ev.id}" onclick="if(!window.getSelection().toString()) { app.openThread('${parentId}'); } event.stopPropagation();">
+          <span class="snippet">返信元を取得中...</span>
+        </div>
+      `;
+      // 非同期で取得
+      if (this.query) {
+        this.query([{ ids: [parentId] }], (pEv) => {
+          if (this.eventStorage) this.eventStorage.set(pEv.id, pEv);
+          if (!this.profiles.has(pEv.pubkey)) {
+            this.fetchProfile(pEv.pubkey, () => this.updateReplyPreview(ev.id, pEv));
+          } else {
+            this.updateReplyPreview(ev.id, pEv);
+          }
+        });
+      }
+    }
+  }
+
+  // --- 💡コピペ対策 (onclick に window.getSelection() の判定を追加) ---
   const html = `
-    <div class="post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${ev.id}')">
-      <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">\
+    <div class="post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
+      <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
       <div class="post-content">
+        ${replyContextHtml}
         <div class="post-header">
           <div class="header-user-info" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();">
             <span class="user-name pubkey-${ev.pubkey}">${this.esc(dName)}${badgeHtml}</span>
@@ -71,31 +114,32 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
     </div>
   `;
 
-  // --- 時系列ソート挿入ロジック ---
   const children = Array.from(container.children);
   const nextElement = children.find(child => {
     const childTime = parseInt(child.getAttribute('data-timestamp'));
-    return ev.created_at > childTime; // 自分より古い要素を見つける
+    return ev.created_at > childTime;
   });
 
-  if (nextElement) {
+  if (nextElement && !prepend) {
     container.insertBefore(this.createHTMLElement(html), nextElement);
+  } else if (prepend) {
+    container.insertAdjacentHTML('afterbegin', html);
   } else {
     container.insertAdjacentHTML('beforeend', html);
   }
 
-  // プロフィール取得などは既存のまま
   if (!this.profiles.has(ev.pubkey)) {
     this.fetchProfile(ev.pubkey, () => this.updateUIPost(ev.pubkey));
   }
 };
 
-// 文字列をDOM要素に変換するヘルパー
+
 app.createHTMLElement = function(html) {
   const div = document.createElement('div');
   div.innerHTML = html.trim();
   return div.firstChild;
 };
+
 
 app.renderNotification = function(ev, prepend) {
   const container = document.getElementById('timeline-notifications');
@@ -139,6 +183,19 @@ app.renderNotification = function(ev, prepend) {
   }
 };
 
+app.updateReplyPreview = function(childId, parentEv) {
+  const el = document.getElementById(`reply-preview-${childId}`);
+  if (!el) return;
+  const pProfile = this.profiles.get(parentEv.pubkey) || {};
+  const pName = pProfile.display_name || pProfile.name || "npub...";
+  const snippet = parentEv.content.replace(/\n/g, ' ').substring(0, 40) + '...';
+  
+  el.innerHTML = `
+    <img src="${this.esc(pProfile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-tiny" loading="lazy">
+    <span class="snippet">${this.esc(pName)} - ${this.esc(snippet)}</span>
+  `;
+};
+
 app.updateUIPost = function(pubkey) {
   const p = this.profiles.get(pubkey);
   if (!p) return;
@@ -172,24 +229,56 @@ app.openThread = function(eventId) {
   if (!eventId) return;
   this.previousTab = this.activeTab === 'thread' ? this.previousTab : this.activeTab;
   this.currentThreadId = eventId;
-  this.state.thread = { newest: 0, oldest: Math.floor(Date.now()/1000) };
+  if(this.state) this.state.thread = { newest: 0, oldest: Math.floor(Date.now()/1000) };
   
+  document.getElementById('thread-parent-post').innerHTML = "";
   document.getElementById('thread-main-post').innerHTML = "";
   document.getElementById('timeline-thread').innerHTML = "";
   
   this.switchTab('thread');
 
-  const parentEv = this.eventStorage.get(eventId);
+  const renderThreadContext = (ev) => {
+    // 中心となる投稿
+    this.renderPost(ev, true, 'thread-main-post');
+    
+    // 1. 上一階層（親）の取得と表示
+    let parentId = null;
+    const eTags = ev.tags ? ev.tags.filter(t => t[0] === 'e') : [];
+    if (eTags.length > 0) {
+      const replyTag = eTags.find(t => t.length > 3 && t[3] === 'reply') || eTags[eTags.length - 1];
+      parentId = replyTag[1];
+    }
+    
+    if (parentId && this.query) {
+      const parentEv = this.eventStorage.get(parentId);
+      if (parentEv) {
+        this.renderPost(parentEv, true, 'thread-parent-post');
+      } else {
+        this.query([{ ids: [parentId] }], (pEv) => {
+          if(this.eventStorage) this.eventStorage.set(pEv.id, pEv);
+          this.renderPost(pEv, true, 'thread-parent-post');
+        });
+      }
+    }
+
+    // 2. 下一階層（子・リプライ）の取得と表示
+    if (this.query) {
+      this.query([{ kinds: [1], '#e': [ev.id] }], (childEv) => {
+        if(this.eventStorage) this.eventStorage.set(childEv.id, childEv);
+        this.renderPost(childEv, false, 'timeline-thread');
+      });
+    }
+  };
+
+  const parentEv = this.eventStorage ? this.eventStorage.get(eventId) : null;
   if (parentEv) {
-    this.renderPost(parentEv, true, 'thread-main-post');
-  } else {
+    renderThreadContext(parentEv);
+  } else if(this.query) {
     this.query([{ ids: [eventId] }], (ev) => {
-      this.eventStorage.set(ev.id, ev);
-      this.renderPost(ev, true, 'thread-main-post');
+      if(this.eventStorage) this.eventStorage.set(ev.id, ev);
+      renderThreadContext(ev);
     });
   }
-
-  this.fetchFeed('older');
 };
 
 app.switchTab = function(tab) {
@@ -211,7 +300,7 @@ app.switchTab = function(tab) {
     document.getElementById(`timeline-${tab}`).classList.remove('hidden');
     if (tab === 'home' || tab === 'public') document.getElementById('post-area').classList.remove('hidden');
     
-    if (document.getElementById(`timeline-${tab}`).children.length === 0) {
+    if (document.getElementById(`timeline-${tab}`).children.length === 0 && this.fetchFeed) {
       this.fetchFeed('older');
     }
   }
