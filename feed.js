@@ -67,21 +67,19 @@ app.fetchFeed = async function(direction) {
     }
   });
 
-  // 通信完了後、全リレーのデータを統合して「抜け」がない基点を計算する
+
   if (fetchedEvents && fetchedEvents.length > 0) {
-    // 重複を排除して新しい順(降順)に並べる
-    const uniqueEvents = Array.from(new Map(fetchedEvents.map(e => [e.id, e])).values());
-    uniqueEvents.sort((a, b) => b.created_at - a.created_at);
-
-    // 要求したバッチサイズ（例:20）番目のイベント時間を「次回の取得基点」にする
-    // ※過疎リレーが返してきた「古すぎる時間」にoldestが引っ張られるのを防ぐ
-    const limitIndex = Math.min(this.batchSize, uniqueEvents.length) - 1;
-    const safeOldest = uniqueEvents[limitIndex].created_at;
-
-    if (state.oldest === 0 || direction === 'older' || (direction === 'latest' && safeOldest < state.oldest)) {
-        state.oldest = safeOldest;
+    const sorted = fetchedEvents.sort((a, b) => b.created_at - a.created_at);
+    const oldestInBatch = sorted[sorted.length - 1].created_at;
+    if (direction === 'older' || state.oldest === 0) {
+      state.oldest = oldestInBatch - 1;
+    } else if (direction === 'latest' && oldestInBatch < state.oldest) {
+      state.oldest = oldestInBatch - 1;
     }
+  } else if (direction === 'older') {
+    state.oldest -= 3600; // 1時間遡る
   }
+
 };
 
 // 既存の取得メソッドも、前回作った getSingleEvent を使うと綺麗になります
