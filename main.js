@@ -5,7 +5,9 @@ import './auth.js';
 import './actions.js';
 import './feed.js';
 import './profile.js';
-import './ui.js';
+import './utils.js';
+import './ui_render.js';
+import './ui_nav.js';
 
 app.init = async function() {
   this.loadSettings();
