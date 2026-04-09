@@ -117,13 +117,12 @@ app.renderPost = function(ev, prepend, targetContainerId = null) {
   const children = Array.from(container.children);
   const nextElement = children.find(child => {
     const childTime = parseInt(child.getAttribute('data-timestamp'));
-    return ev.created_at > childTime;
+    return ev.created_at > childTime; // 自分より古い(時間が前)要素を探す
   });
 
-  if (nextElement && !prepend) {
+  // prepend引数に頼らず、常に時間順(新しいものが上)で正しい位置に挿入する
+  if (nextElement) {
     container.insertBefore(this.createHTMLElement(html), nextElement);
-  } else if (prepend) {
-    container.insertAdjacentHTML('afterbegin', html);
   } else {
     container.insertAdjacentHTML('beforeend', html);
   }
@@ -226,60 +225,66 @@ app.openProfile = function(pubkey) {
 };
 
 app.openThread = function(eventId) {
-  if (!eventId) return;
-  this.previousTab = this.activeTab === 'thread' ? this.previousTab : this.activeTab;
+  this.previousTab = this.activeTab;
   this.currentThreadId = eventId;
-  if(this.state) this.state.thread = { newest: 0, oldest: Math.floor(Date.now()/1000) };
-  
-  document.getElementById('thread-parent-post').innerHTML = "";
-  document.getElementById('thread-main-post').innerHTML = "";
-  document.getElementById('timeline-thread').innerHTML = "";
-  
   this.switchTab('thread');
 
+  const containerParent = document.getElementById('thread-parent-post');
+  const containerMain = document.getElementById('thread-main-post');
+  const containerReplies = document.getElementById('timeline-thread');
+
+  // 表示の初期化
+  containerParent.innerHTML = '';
+  containerMain.innerHTML = '';
+  containerReplies.innerHTML = '';
+
   const renderThreadContext = (ev) => {
-    // 中心となる投稿
-    this.renderPost(ev, true, 'thread-main-post');
-    
-    // 1. 上一階層（親）の取得と表示
-    let parentId = null;
-    const eTags = ev.tags ? ev.tags.filter(t => t[0] === 'e') : [];
+    // 1. 当該投稿を表示（これは1件だけ）
+    this.renderPost(ev, false, 'thread-main-post');
+
+    // 2. 1つ上の親を表示
+    const eTags = ev.tags.filter(t => t[0] === 'e');
     if (eTags.length > 0) {
-      const replyTag = eTags.find(t => t.length > 3 && t[3] === 'reply') || eTags[eTags.length - 1];
-      parentId = replyTag[1];
-    }
-    
-    if (parentId && this.query) {
-      const parentEv = this.eventStorage.get(parentId);
-      if (parentEv) {
-        this.renderPost(parentEv, true, 'thread-parent-post');
-      } else {
-        this.query([{ ids: [parentId] }], (pEv) => {
-          if(this.eventStorage) this.eventStorage.set(pEv.id, pEv);
-          this.renderPost(pEv, true, 'thread-parent-post');
-        });
-      }
+      // replyがあればそれを、なければ最初のeタグを親とみなす
+      const parentTag = eTags.find(t => t[3] === 'reply') || eTags[0];
+      const parentId = parentTag[1];
+      
+      this.query([{ ids: [parentId] }], (pEv) => {
+        this.renderPost(pEv, false, 'thread-parent-post');
+      });
     }
 
-    // 2. 下一階層（子・リプライ）の取得と表示
+    // 3. 1つ下の子（リプライ）を表示：最大30件
     if (this.query) {
-      this.query([{ kinds: [1], '#e': [ev.id] }], (childEv) => {
-        if(this.eventStorage) this.eventStorage.set(childEv.id, childEv);
-        this.renderPost(childEv, false, 'timeline-thread');
+      // 当該投稿(ev.id)を「e」タグに持つ投稿を検索
+      this.query([{ kinds: [1], '#e': [ev.id], limit: 30 }], (childEv) => {
+        // 孫（さらに下のリプライ）が混ざらないよう、直接のリプライかチェック
+        const cTags = childEv.tags.filter(t => t[0] === 'e');
+        
+        // eタグの最後、あるいはmarkerが'reply'のものがこの投稿(ev.id)を指していれば「1つ下の子」
+        const directReplyTag = cTags.find(t => t[3] === 'reply') || cTags[cTags.length - 1];
+        
+        if (directReplyTag && directReplyTag[1] === ev.id) {
+          if(this.eventStorage) this.eventStorage.set(childEv.id, childEv);
+          // prepend=falseで渡すことで、時間順(新しい順)に挿入される
+          this.renderPost(childEv, false, 'timeline-thread');
+        }
       });
     }
   };
 
-  const parentEv = this.eventStorage ? this.eventStorage.get(eventId) : null;
-  if (parentEv) {
-    renderThreadContext(parentEv);
-  } else if(this.query) {
+  // データの取得開始
+  const targetEv = this.eventStorage ? this.eventStorage.get(eventId) : null;
+  if (targetEv) {
+    renderThreadContext(targetEv);
+  } else {
     this.query([{ ids: [eventId] }], (ev) => {
       if(this.eventStorage) this.eventStorage.set(ev.id, ev);
       renderThreadContext(ev);
     });
   }
 };
+
 
 app.switchTab = function(tab) {
   this.activeTab = tab;

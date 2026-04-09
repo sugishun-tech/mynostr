@@ -138,10 +138,7 @@ body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); c
 
 @media (max-width: 700px) {
   .app-container { justify-content: flex-start; }
-  .sidebar { width: 70px; padding: 0; align-items: center; }
-  .sidebar-inner { width: auto; align-items: center; }
-  .nav-links li { padding: 15px; width: auto; }
-  .nav-links li .icon { margin-right: 0; }
-  .nav-links li span:not(.icon) { display: none; }
-  .logo, #login-btn, #my-name, .right-sidebar { display: none; }
+  .sidebar { display: none; } /* サイドバー非表示 */
+  .right-sidebar { display: none; } /* 右サイドバー非表示 */
+  .main-content { max-width: 100%; border: none; } /* 画面幅いっぱいに */
 }
