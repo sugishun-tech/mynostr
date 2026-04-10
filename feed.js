@@ -36,7 +36,6 @@ app.fetchFeed = async function(direction) {
     filter.until = now;
   } else if (direction === 'newer') {
     filter.since = state.newest;
-    filter.until = now;
   } else if (direction === 'older') {
     filter.until = state.oldest;
   }
@@ -78,6 +77,8 @@ app.fetchFeed = async function(direction) {
     }
   } else if (direction === 'older') {
     state.oldest -= 3600; // 1時間遡る
+  } else if (direction === 'newer') {
+    state.newest += 3600;
   }
 
 };
