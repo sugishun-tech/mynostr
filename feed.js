@@ -5,9 +5,6 @@ app.fetchFeed = async function(direction) {
   const state = this.state[tab];
   const now = Math.floor(Date.now() / 1000);
   
-  // -----------------------------------------
-  // 1. タブごとのベースフィルタ構築
-  // -----------------------------------------
   let filter = { kinds: [1], limit: this.batchSize };
 
   switch (tab) {
@@ -29,9 +26,6 @@ app.fetchFeed = async function(direction) {
       break;
   }
 
-  // -----------------------------------------
-  // 2. 取得方向に基づく時間軸の設定
-  // -----------------------------------------
   if (direction === 'latest') {
     filter.until = now;
   } else if (direction === 'newer') {
@@ -40,24 +34,14 @@ app.fetchFeed = async function(direction) {
     filter.until = state.oldest;
   }
 
-  // -----------------------------------------
-  // 3. データ取得と状態の更新 (飛び飛び問題の解消)
-  // -----------------------------------------
   const containerId = tab === 'notifications' ? 'timeline-notifications' : `timeline-${tab}`;
   const container = document.getElementById(containerId);
 
-  // 【修正のコア】
-  // イベント受信ごとのコールバックで描画は即座に行いUXを保つが、
-  // `state.oldest` の更新は通信が完了してから安全に計算する。
   const fetchedEvents = await this.query([filter], (event) => {
-    // 重複チェックと描画はリアルタイムに行う
     if (container && container.querySelector(`[data-event-id="${event.id}"]`)) return;
-    if(this.eventStorage) this.eventStorage.set(event.id, event);
+    if (this.eventStorage) this.eventStorage.set(event.id, event);
 
-    // 新しい方の時間はリアルタイム更新でOK
     if (event.created_at > state.newest) state.newest = event.created_at;
-
-    // ※ここでは古い方の時間（state.oldest）を更新しない！
 
     if (tab === 'notifications') {
       this.renderNotification(event);
@@ -65,7 +49,6 @@ app.fetchFeed = async function(direction) {
       this.renderPost(event, false, containerId);
     }
   });
-
 
   if (fetchedEvents && fetchedEvents.length > 0) {
     const sorted = fetchedEvents.sort((a, b) => b.created_at - a.created_at);
@@ -76,14 +59,12 @@ app.fetchFeed = async function(direction) {
       state.oldest = oldestInBatch - 1;
     }
   } else if (direction === 'older') {
-    state.oldest -= 3600; // 1時間遡る
+    state.oldest -= 3600; // 取得が空振った場合は1時間遡る
   } else if (direction === 'newer') {
     state.newest += 3600;
   }
-
 };
 
-// 既存の取得メソッドも、前回作った getSingleEvent を使うと綺麗になります
 app.fetchSingleEvent = function(id) {
   this.getSingleEvent([{ ids: [id] }]).then(ev => {
     if(!ev) return;

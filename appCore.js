@@ -1,12 +1,14 @@
+import { SimplePool } from 'https://esm.sh/nostr-tools@2.7.0';
+
 export const app = {
   myPubkey: "",
-  relays: [],
+  pool: new SimplePool(),
+  relayUrls: [], // settings.js で読み込まれます
   eventStorage: new Map(),
   profiles: new Map(),
   nip05Status: new Map(),
   likedIds: new Set(),
   following: new Set(),
-  subscriptions: new Map(),
   
   activeTab: 'public',
   previousTab: null,

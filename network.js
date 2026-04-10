@@ -1,83 +1,78 @@
 import { app } from './appCore.js';
 
 app.connectRelays = function() {
-  this.relays.forEach(ws => ws.close());
-  this.relays = [];
-  this.relayUrls.forEach(url => {
-    const ws = new WebSocket(url.trim());
-    ws.onmessage = (msg) => {
-      try {
-        const data = JSON.parse(msg.data);
-        if (data[0] === "EVENT" && this.subscriptions.has(data[1])) {
-          this.subscriptions.get(data[1])(data[2]);
-        }
-      } catch(e) {}
-    };
-    this.relays.push(ws);
-  });
+  // SimplePool が必要に応じて自動的に接続・再接続を管理するため、
+  // 明示的な WebSocket の生成と初期化は不要になりました。
 };
 
 app.broadcast = function(signedEvent) {
-  this.relays.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["EVENT", signedEvent]));
-  });
+  try {
+    // 全リレーに対してイベントをパブリッシュします
+    this.pool.publish(this.relayUrls, signedEvent);
+  } catch(e) {
+    console.error("Broadcast failed:", e);
+  }
 };
-
 
 app.query = function(filters, onEvent) {
   return new Promise((resolve) => {
-    const subId = "sub_" + Math.random().toString(36).substring(7);
-    const collectedEvents = []; // 収集用
+    const collectedEvents = [];
+    
+    // subscribeMany を使い、指定した全リレーから安全にデータを収集します
+    const sub = this.pool.subscribeMany(
+      this.relayUrls,
+      filters,
+      {
+        onevent: (ev) => {
+          collectedEvents.push(ev);
+          if (onEvent) onEvent(ev); // 逐次描画の維持
+        },
+        oneose: () => {
+          // すべてのリレーからデータを取り切り、終了通知が来たら閉じる
+          sub.close();
+          resolve(collectedEvents);
+        }
+      }
+    );
 
-    this.subscriptions.set(subId, (ev) => {
-      collectedEvents.push(ev);
-      if (onEvent) onEvent(ev); // 既存の逐次描画コールバックも維持
-    });
-
-    this.relays.forEach(ws => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["REQ", subId, ...filters]));
-    });
-
+    // EOSEを返さない不良リレーが存在する場合のフェイルセーフ (5秒)
     setTimeout(() => {
-      this.relays.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["CLOSE", subId]));
-      });
-      this.subscriptions.delete(subId);
-      resolve(collectedEvents); // 4秒後に取得した全イベントを返す
-    }, 4000);
+      sub.close();
+      resolve(collectedEvents);
+    }, 5000);
   });
 };
 
-// 新設: 1件見つかった瞬間にサブスクリプションを閉じて即座にresolveする
 app.getSingleEvent = function(filters) {
   return new Promise((resolve) => {
-    const subId = "sub_" + Math.random().toString(36).substring(7);
     let handled = false;
 
-    const closeSub = () => {
-      this.relays.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["CLOSE", subId]));
-      });
-      this.subscriptions.delete(subId);
-    };
-
-    this.subscriptions.set(subId, (ev) => {
-      if (!handled) {
-        handled = true;
-        closeSub(); // 1件見つけたら即座に通信を打ち切る（爆速化）
-        resolve(ev);
+    const sub = this.pool.subscribeMany(
+      this.relayUrls,
+      filters,
+      {
+        onevent: (ev) => {
+          if (!handled) {
+            handled = true;
+            sub.close(); // 1件見つけた瞬間に即座に切断して爆速化
+            resolve(ev);
+          }
+        },
+        oneose: () => {
+          if (!handled) {
+            handled = true;
+            sub.close();
+            resolve(null);
+          }
+        }
       }
-    });
+    );
 
-    this.relays.forEach(ws => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(["REQ", subId, ...filters]));
-    });
-
-    // 4秒待っても来なければ null で諦める
+    // タイムアウト時のフェイルセーフ
     setTimeout(() => {
       if (!handled) {
         handled = true;
-        closeSub();
+        sub.close();
         resolve(null);
       }
     }, 4000);
