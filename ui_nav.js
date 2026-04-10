@@ -7,7 +7,9 @@ app.openProfile = function(pubkey) {
 
 
 app.openThread = async function(eventId) {
-  this.previousTab = this.activeTab;
+  if (this.activeTab !== 'thread') {
+    this.previousTab = this.activeTab;
+  }
   this.currentThreadId = eventId;
   this.switchTab('thread');
 

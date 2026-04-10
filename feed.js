@@ -30,6 +30,8 @@ app.fetchFeed = async function(direction) {
     filter.until = now;
   } else if (direction === 'newer') {
     filter.since = state.newest;
+    filter.until = state.newest + 600;
+    delete filter.limit;
   } else if (direction === 'older') {
     filter.until = state.oldest;
   }

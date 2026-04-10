@@ -39,7 +39,7 @@ app.query = function(filters, onEvent) {
     setTimeout(() => {
       sub.close();
       resolve(collectedEvents);
-    }, 5000);
+    }, 3000);
   });
 };
 
@@ -75,6 +75,6 @@ app.getSingleEvent = function(filters) {
         sub.close();
         resolve(null);
       }
-    }, 4000);
+    }, 2500);
   });
 };
