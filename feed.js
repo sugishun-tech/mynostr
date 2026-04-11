@@ -40,7 +40,7 @@ app.fetchFeed = async function(direction) {
   const container = document.getElementById(containerId);
 
   const fetchedEvents = await this.query([filter], (event) => {
-    if (container && container.querySelector(`[data-event-id="${event.id}"]`)) return;
+    if (container && container.querySelector(`.main-post[data-event-id="${event.id}"]`)) return;
     if (this.eventStorage) this.eventStorage.set(event.id, event);
 
     if (event.created_at > state.newest) state.newest = event.created_at;

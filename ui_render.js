@@ -65,7 +65,7 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   }
 
   const html = `
-    <div class="post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
+    <div class="post main-post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
       <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
       <div class="post-content">
         ${replyContextHtml}
