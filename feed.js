@@ -62,8 +62,6 @@ app.fetchFeed = async function(direction) {
     }
   } else if (direction === 'older') {
     state.oldest -= 3600; // 取得が空振った場合は1時間遡る
-  } else if (direction === 'newer') {
-    state.newest += 3600;
   }
 };
 
