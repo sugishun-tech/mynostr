@@ -39,7 +39,7 @@ app.query = function(filters, onEvent) {
     setTimeout(() => {
       sub.close();
       resolve(collectedEvents);
-    }, 3000);
+    }, 6000);
   });
 };
 
@@ -75,7 +75,7 @@ app.getSingleEvent = function(filters) {
         sub.close();
         resolve(null);
       }
-    }, 2500);
+    }, 6000);
   });
 };
 
@@ -115,6 +115,6 @@ app.fetchEventBatched = function(id, cb) {
       callbacks.forEach(({ id, cb }) => {
         if (cb) cb(this.eventStorage ? this.eventStorage.get(id) : null);
       });
-    }, 100);
+    }, 500);
   }
 };

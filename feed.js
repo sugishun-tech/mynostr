@@ -27,7 +27,7 @@ app.fetchFeed = async function(direction) {
   }
 
   if (direction === 'latest') {
-    filter.until = now;
+    //filter.until = now;
   } else if (direction === 'newer') {
     filter.since = state.newest;
     filter.until = state.newest + 600;
