@@ -51,9 +51,9 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
         <div class="reply-context preview" id="reply-preview-${ev.id}" onclick="if(!window.getSelection().toString()) { app.openThread('${parentId}'); } event.stopPropagation();">
           <span class="snippet">返信元を取得中...</span>
         </div>`;
-      if (this.query) {
-        this.query([{ ids: [parentId] }], (pEv) => {
-          if (this.eventStorage) this.eventStorage.set(pEv.id, pEv);
+      if (this.fetchEventBatched) {
+        this.fetchEventBatched(parentId, (pEv) => {
+          if (!pEv) return;
           if (!this.profiles.has(pEv.pubkey)) {
             this.fetchProfile(pEv.pubkey, () => this.updateReplyPreview(ev.id, pEv));
           } else {

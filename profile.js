@@ -1,28 +1,53 @@
 import { app } from './appCore.js';
 
-app.fetchProfile = async function(pubkey, cb) {
-  // すでにキャッシュがあれば即返す
+app._profileQueue = new Set();
+app._profileCallbacks = [];
+app._profileTimer = null;
+
+app.fetchProfile = function(pubkey, cb) {
   if (this.profiles.has(pubkey)) {
     const p = this.profiles.get(pubkey);
     if (cb) cb(p);
-    return p;
+    return Promise.resolve(p);
   }
-  
-  // getSingleEventを使って1件取得
-  const ev = await this.getSingleEvent([{ kinds: [0], authors: [pubkey], limit: 1 }]);
-  
-  if (ev) {
-    try {
-      const data = JSON.parse(ev.content);
-      this.profiles.set(pubkey, data);
-      if (cb) cb(data); // 既存のコールバック互換性も維持
-      return data;
-    } catch(e) {
-      console.error("プロフィール解析エラー", e);
+
+  return new Promise((resolve) => {
+    this._profileQueue.add(pubkey);
+    this._profileCallbacks.push({ pubkey, cb: (data) => { if(cb) cb(data); resolve(data); } });
+
+    if (!this._profileTimer) {
+      this._profileTimer = setTimeout(async () => {
+        const pubkeys = Array.from(this._profileQueue);
+        const callbacks = [...this._profileCallbacks];
+        
+        this._profileQueue.clear();
+        this._profileCallbacks = [];
+        this._profileTimer = null;
+
+        if (pubkeys.length === 0) return;
+
+        // 複数人のプロフィールを1回のREQで一括取得
+        const evs = await this.query([{ kinds: [0], authors: pubkeys }]);
+        
+        evs.forEach(ev => {
+          try {
+            const data = JSON.parse(ev.content);
+            this.profiles.set(ev.pubkey, data);
+          } catch(e) { console.error("プロフィール解析エラー", e); }
+        });
+
+        callbacks.forEach(({ pubkey, cb }) => {
+          // 何度も無駄に再取得するのを防ぐため、見つからなかった場合は空オブジェクトを入れる
+          if (!this.profiles.has(pubkey)) {
+            this.profiles.set(pubkey, {}); 
+          }
+          cb(this.profiles.get(pubkey) || null);
+        });
+      }, 100);
     }
-  }
-  return null;
+  });
 };
+
 
 app.verifyNip05 = async function(nip05, pubkey) {
   if (this.nip05Status.has(nip05)) return;

@@ -78,3 +78,43 @@ app.getSingleEvent = function(filters) {
     }, 2500);
   });
 };
+
+// network.js の末尾に追記
+app._eventQueue = new Set();
+app._eventCallbacks = [];
+app._eventTimer = null;
+
+app.fetchEventBatched = function(id, cb) {
+  if (this.eventStorage && this.eventStorage.has(id)) {
+    if (cb) cb(this.eventStorage.get(id));
+    return;
+  }
+  
+  this._eventQueue.add(id);
+  this._eventCallbacks.push({ id, cb });
+
+  if (!this._eventTimer) {
+    // 100ms待機して、溜まったリクエストを1回のREQでまとめて取得
+    this._eventTimer = setTimeout(async () => {
+      const ids = Array.from(this._eventQueue);
+      const callbacks = [...this._eventCallbacks];
+      
+      this._eventQueue.clear();
+      this._eventCallbacks = [];
+      this._eventTimer = null;
+
+      if (ids.length === 0) return;
+
+      // まとめて取得
+      const evs = await this.query([{ ids: ids }]);
+      evs.forEach(ev => {
+        if (this.eventStorage) this.eventStorage.set(ev.id, ev);
+      });
+
+      // 各コールバックに結果を返す
+      callbacks.forEach(({ id, cb }) => {
+        if (cb) cb(this.eventStorage ? this.eventStorage.get(id) : null);
+      });
+    }, 100);
+  }
+};

@@ -67,10 +67,10 @@ app.fetchFeed = async function(direction) {
   }
 };
 
+
 app.fetchSingleEvent = function(id) {
-  this.getSingleEvent([{ ids: [id] }]).then(ev => {
+  this.fetchEventBatched(id, (ev) => {
     if(!ev) return;
-    if(this.eventStorage) this.eventStorage.set(ev.id, ev);
     const els = document.querySelectorAll('.snippet');
     els.forEach(el => {
       if(el.innerText.includes("取得中...")) {
@@ -79,3 +79,4 @@ app.fetchSingleEvent = function(id) {
     });
   });
 };
+
