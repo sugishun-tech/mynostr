@@ -7,8 +7,69 @@ app._eventTimer = app._eventTimer || null;
 
 app.connectRelays = function() {};
 
-app.broadcast = function(signedEvent) {
-  this.pool.publish(this.relayUrls, signedEvent);
+// network.js
+app.broadcast = async function(signedEvent) {
+  console.log("Broadcasting to:", this.relayUrls);
+
+  if (!this.relayUrls || this.relayUrls.length === 0) {
+    console.error("No relays configured.");
+    return;
+  }
+
+  // nostr-tools v2系以降の仕様:
+  // pool.publish は各リレーの Promise 配列を返すのではなく、
+  // 内部で複数のリレーへ送信を開始します。
+  try {
+    // 確実に送信を試みるための Promise.any
+    // pool.publish() の結果を await することで、
+    // 少なくとも一つのリレーに到達した時点で成功とみなします。
+    await Promise.any(this.pool.publish(this.relayUrls, signedEvent));
+    
+    console.log("[SUCCESS] Event published successfully to at least one relay.");
+  } catch (e) {
+    // すべてのリレーで失敗した場合は AggregateError が発生します
+    console.error("[FAILED] Could not publish to any relay:", e);
+    throw e; 
+  }
+};
+
+app.broadcast_old = async function(signedEvent) {
+  if (!this.relayUrls || this.relayUrls.length === 0) {
+    console.error("Relay URLs are empty.");
+    throw new Error("リレーが設定されていません");
+  }
+
+  console.log("Broadcasting event:", signedEvent);
+
+  // 全リレーに対して一斉送信
+  const pubs = this.pool.publish(this.relayUrls, signedEvent);
+  
+  // 成功を確認するための Promise 配列
+  const promises = pubs.map(pub => {
+    return new Promise((resolve, reject) => {
+      // タイムアウト設定（5秒反応がなければ失敗とみなす）
+      const timeout = setTimeout(() => reject(new Error("Timeout")), 5000);
+      
+      pub.on('ok', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      pub.on('failed', (reason) => {
+        clearTimeout(timeout);
+        reject(new Error(reason));
+      });
+    });
+  });
+
+  try {
+    // 少なくとも一つのリレーが受け取れば成功とする
+    await Promise.any(promises);
+    console.log("Broadcast successful at least one relay");
+  } catch (e) {
+    console.error("Broadcast failed on all relays:", e);
+    // ユーザーに通知するために例外を投げる
+    throw e;
+  }
 };
 
 /**
