@@ -1,8 +1,9 @@
-import { SimplePool } from 'https://esm.sh/nostr-tools@2.7.0';
+// appCore.js
+import { NostrFetcher } from 'https://cdn.jsdelivr.net/npm/nostr-fetch@0.16.0/+esm';
 
 export const app = {
   myPubkey: "",
-  pool: new SimplePool(),
+  fetcher: NostrFetcher.init(), // SimplePool の代わりに NostrFetcher を初期化
   relayUrls: [], // settings.js で読み込まれます
   eventStorage: new Map(),
   profiles: new Map(),

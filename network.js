@@ -1,120 +1,103 @@
+// network.js
 import { app } from './appCore.js';
 
-app.connectRelays = function() {
-  // SimplePool が必要に応じて自動的に接続・再接続を管理するため、
-  // 明示的な WebSocket の生成と初期化は不要になりました。
-};
+app._eventQueue = app._eventQueue || new Set();
+app._eventCallbacks = app._eventCallbacks || [];
+app._eventTimer = app._eventTimer || null;
+
+app.connectRelays = function() {};
 
 app.broadcast = function(signedEvent) {
+  this.pool.publish(this.relayUrls, signedEvent);
+};
+
+/**
+ * タイムライン取得
+ * fetchLatestEvents が until を無視するリレー対策として
+ * fetchAllEvents を使い、自前で limit 制御を行います。
+ */
+app.query = async function(filters, onEvent) {
+  const rawFilter = filters[0];
+  const { since, until, limit, ...cleanFilter } = rawFilter;
+  const fetchLimit = limit || 30;
+
+  console.log(`[DEBUG] query START: until=${until || 'now'}, limit=${fetchLimit}`);
+
   try {
-    // 全リレーに対してイベントをパブリッシュします
-    this.pool.publish(this.relayUrls, signedEvent);
-  } catch(e) {
-    console.error("Broadcast failed:", e);
+    // 時間範囲を定義
+    const timeRange = {};
+    if (until) timeRange.until = until;
+    if (since) timeRange.since = since;
+
+    // fetchAllEvents はジェネレータのように動作するため、
+    // fetchLimit に達した時点で自前で打ち切ることで「下30件」を確実に実現します。
+    const events = [];
+    
+    // allEventsIterator を使用して、1件ずつ取得を制御
+    const iter = app.fetcher.allEventsIterator(
+      this.relayUrls,
+      cleanFilter,
+      timeRange,
+      { sort: true } // 常に新しい順にソートして取得
+    );
+
+    for await (const ev of iter) {
+      events.push(ev);
+      if (onEvent) onEvent(ev);
+      
+      // 指定件数（30件）に達したら即座にストップして、リレーとの通信を切る
+      if (events.length >= fetchLimit) {
+        break; 
+      }
+    }
+
+    console.log(`[DEBUG] query END: fetched ${events.length} events.`);
+    if (events.length > 0) {
+      console.log(`[DEBUG] Newest: ${events[0].created_at}, Oldest: ${events[events.length-1].created_at}`);
+    }
+
+    // feed.js の state.oldest 更新用に配列を返す
+    return events;
+
+  } catch (e) {
+    console.error("[DEBUG] query FATAL:", e);
+    return [];
   }
 };
 
-app.query = function(filters, onEvent) {
-  return new Promise((resolve) => {
-    const collectedEvents = [];
-    
-    // subscribeMany を使い、指定した全リレーから安全にデータを収集します
-    const sub = this.pool.subscribeMany(
-      this.relayUrls,
-      filters,
-      {
-        onevent: (ev) => {
-          collectedEvents.push(ev);
-          if (onEvent) onEvent(ev); // 逐次描画の維持
-        },
-        oneose: () => {
-          // すべてのリレーからデータを取り切り、終了通知が来たら閉じる
-          sub.close();
-          resolve(collectedEvents);
-        }
-      }
-    );
-
-    // EOSEを返さない不良リレーが存在する場合のフェイルセーフ (5秒)
-    setTimeout(() => {
-      sub.close();
-      resolve(collectedEvents);
-    }, 6000);
-  });
+app.getSingleEvent = async function(filters) {
+  try {
+    const { since, until, limit, ...cleanFilter } = filters[0];
+    const ev = await app.fetcher.fetchLastEvent(this.relayUrls, cleanFilter);
+    return ev || null;
+  } catch (e) {
+    return null;
+  }
 };
-
-app.getSingleEvent = function(filters) {
-  return new Promise((resolve) => {
-    let handled = false;
-
-    const sub = this.pool.subscribeMany(
-      this.relayUrls,
-      filters,
-      {
-        onevent: (ev) => {
-          if (!handled) {
-            handled = true;
-            sub.close(); // 1件見つけた瞬間に即座に切断して爆速化
-            resolve(ev);
-          }
-        },
-        oneose: () => {
-          if (!handled) {
-            handled = true;
-            sub.close();
-            resolve(null);
-          }
-        }
-      }
-    );
-
-    // タイムアウト時のフェイルセーフ
-    setTimeout(() => {
-      if (!handled) {
-        handled = true;
-        sub.close();
-        resolve(null);
-      }
-    }, 6000);
-  });
-};
-
-// network.js の末尾に追記
-app._eventQueue = new Set();
-app._eventCallbacks = [];
-app._eventTimer = null;
 
 app.fetchEventBatched = function(id, cb) {
   if (this.eventStorage && this.eventStorage.has(id)) {
     if (cb) cb(this.eventStorage.get(id));
     return;
   }
-  
   this._eventQueue.add(id);
   this._eventCallbacks.push({ id, cb });
-
   if (!this._eventTimer) {
-    // 100ms待機して、溜まったリクエストを1回のREQでまとめて取得
     this._eventTimer = setTimeout(async () => {
       const ids = Array.from(this._eventQueue);
       const callbacks = [...this._eventCallbacks];
-      
       this._eventQueue.clear();
       this._eventCallbacks = [];
       this._eventTimer = null;
-
-      if (ids.length === 0) return;
-
-      // まとめて取得
-      const evs = await this.query([{ ids: ids }]);
-      evs.forEach(ev => {
-        if (this.eventStorage) this.eventStorage.set(ev.id, ev);
-      });
-
-      // 各コールバックに結果を返す
-      callbacks.forEach(({ id, cb }) => {
-        if (cb) cb(this.eventStorage ? this.eventStorage.get(id) : null);
-      });
-    }, 500);
+      try {
+        const evs = await app.fetcher.fetchAllEvents(this.relayUrls, { ids }, {});
+        evs.forEach(ev => {
+          if(this.eventStorage) this.eventStorage.set(ev.id, ev);
+        });
+        callbacks.forEach(({ id, cb }) => {
+          if (cb) cb(this.eventStorage.get(id) || null);
+        });
+      } catch(e) {}
+    }, 200);
   }
 };

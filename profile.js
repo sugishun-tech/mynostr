@@ -1,3 +1,4 @@
+// profile.js
 import { app } from './appCore.js';
 
 app._profileQueue = new Set();
@@ -26,18 +27,27 @@ app.fetchProfile = function(pubkey, cb) {
 
         if (pubkeys.length === 0) return;
 
-        // 複数人のプロフィールを1回のREQで一括取得
-        const evs = await this.query([{ kinds: [0], authors: pubkeys }]);
-        
-        evs.forEach(ev => {
-          try {
-            const data = JSON.parse(ev.content);
-            this.profiles.set(ev.pubkey, data);
-          } catch(e) { console.error("プロフィール解析エラー", e); }
-        });
+        try {
+          // nostr-fetch の機能を使って、各著者の "最新のKind 0 (プロフィール)" を効率よく取得
+          const iter = app.fetcher.fetchLastEventPerAuthor(
+            { authors: pubkeys, relayUrls: this.relayUrls },
+            { kinds: [0] }
+          );
+          
+          for await (const { author, event } of iter) {
+            if (event) {
+              try {
+                const data = JSON.parse(event.content);
+                this.profiles.set(author, data);
+              } catch(e) { console.error("プロフィール解析エラー", e); }
+            } else {
+              // 見つからなかった場合は空オブジェクトを入れて無駄な再取得を防ぐ
+              this.profiles.set(author, {});
+            }
+          }
+        } catch(e) { console.error("Profile fetch error", e); }
 
         callbacks.forEach(({ pubkey, cb }) => {
-          // 何度も無駄に再取得するのを防ぐため、見つからなかった場合は空オブジェクトを入れる
           if (!this.profiles.has(pubkey)) {
             this.profiles.set(pubkey, {}); 
           }
@@ -47,7 +57,6 @@ app.fetchProfile = function(pubkey, cb) {
     }
   });
 };
-
 
 app.verifyNip05 = async function(nip05, pubkey) {
   if (this.nip05Status.has(nip05)) return;
