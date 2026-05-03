@@ -77,49 +77,60 @@ app.broadcast_old = async function(signedEvent) {
  * fetchLatestEvents が until を無視するリレー対策として
  * fetchAllEvents を使い、自前で limit 制御を行います。
  */
+// network.js
 app.query = async function(filters, onEvent) {
   const rawFilter = filters[0];
-  const { since, until, limit, ...cleanFilter } = rawFilter;
-  const fetchLimit = limit || 30;
+  const fetchLimit = rawFilter.limit || 30;
 
-  console.log(`[DEBUG] query START: until=${until || 'now'}, limit=${fetchLimit}`);
+  console.log(`[DEBUG] query START: until=${rawFilter.until || 'now'}, limit=${fetchLimit}`);
 
   try {
-    // 時間範囲を定義
-    const timeRange = {};
-    if (until) timeRange.until = until;
-    if (since) timeRange.since = since;
-
-    // fetchAllEvents はジェネレータのように動作するため、
-    // fetchLimit に達した時点で自前で打ち切ることで「下30件」を確実に実現します。
-    const events = [];
-    
-    // allEventsIterator を使用して、1件ずつ取得を制御
-    const iter = app.fetcher.allEventsIterator(
-      this.relayUrls,
-      cleanFilter,
-      timeRange,
-      { sort: true } // 常に新しい順にソートして取得
-    );
-
-    for await (const ev of iter) {
-      events.push(ev);
-      if (onEvent) onEvent(ev);
+    return new Promise((resolve) => {
+      const events = [];
       
-      // 指定件数（30件）に達したら即座にストップして、リレーとの通信を切る
-      if (events.length >= fetchLimit) {
-        break; 
-      }
-    }
+      // nostr-tools v1.17.0 の仕様に合わせて .sub() を使用します
+      const sub = this.pool.sub(this.relayUrls, [rawFilter]);
 
-    console.log(`[DEBUG] query END: fetched ${events.length} events.`);
-    if (events.length > 0) {
-      console.log(`[DEBUG] Newest: ${events[0].created_at}, Oldest: ${events[events.length-1].created_at}`);
-    }
+      // イベント受信時の処理
+      sub.on('event', (ev) => {
+        // until や since を無視する一部のポンコツリレー対策
+        if (rawFilter.until && ev.created_at > rawFilter.until) return;
+        if (rawFilter.since && ev.created_at < rawFilter.since) return;
 
-    // feed.js の state.oldest 更新用に配列を返す
-    return events;
+        // 重複チェックをしてから配列に追加
+        if (!events.some(e => e.id === ev.id)) {
+          events.push(ev);
+        }
+      });
 
+      let isFinished = false;
+      const finish = () => {
+        if (isFinished) return;
+        isFinished = true;
+        // v1系では .close() ではなく .unsub() で通信を閉じます
+        sub.unsub(); 
+        
+        // 時間の新しい順にソートして、きっちり fetchLimit 件（30件など）だけ抽出
+        events.sort((a, b) => b.created_at - a.created_at);
+        const finalEvents = events.slice(0, fetchLimit);
+        
+        // ソート済みの綺麗な状態からUIへ一気に描画
+        finalEvents.forEach(ev => {
+          if (onEvent) onEvent(ev);
+        });
+        
+        console.log(`[DEBUG] query END: fetched ${finalEvents.length} events.`);
+        resolve(finalEvents); // feed.js の state 更新用に配列を返す
+      };
+
+      // リレーから「これ以上データはないよ(End of Stored Events)」の合図が来たら終了処理へ
+      sub.on('eose', () => {
+        finish();
+      });
+
+      // 3秒経過したら強制終了（反応の遅いリレーを無限に待ってタイムラインが止まるのを防ぐ）
+      setTimeout(finish, 3000);
+    });
   } catch (e) {
     console.error("[DEBUG] query FATAL:", e);
     return [];
