@@ -2,7 +2,7 @@ export const DEFAULT_CONFIG = {
   relays: [
     "wss://relay-jp.nostr.wirednet.jp/",
     "wss://yabu.me/",
-    "wss://r.kojira.io/",
+    //"wss://r.kojira.io/",
     "wss://nrelay-jp.c-stellar.net/",
   ],
   batchSize: 30,
