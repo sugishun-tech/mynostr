@@ -65,9 +65,8 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
     }
   }
 
-  const skipMute = containerId === 'timeline-notifications';
   const profileKnown = this.profiles.has(ev.pubkey);
-  const visibleClass = (!this._renderingBatch && (skipMute || (profileKnown && !this.isMutedEvent(ev)))) ? ' visible' : '';
+  const visibleClass = (!this._renderingBatch && this.canRevealEvent(ev, container)) ? ' visible' : '';
   const shouldFetchProfile = !profileKnown;
 
   const html = `
@@ -195,7 +194,7 @@ app.updateUIPost = function(pubkey) {
       const ev = this.eventStorage ? this.eventStorage.get(id) : null;
       if (ev) {
         const inNotifications = el.closest('#timeline-notifications') !== null;
-        el.classList.toggle('visible', inNotifications || !this.isMutedEvent(ev));
+        el.classList.toggle('visible', this.canRevealEvent(ev, el));
       }
     }
   });

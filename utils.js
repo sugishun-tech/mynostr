@@ -40,17 +40,47 @@ app._safeRegexList = function(patterns) {
   }).filter(Boolean);
 };
 
+app.hasDisplayNameMuteRules = function() {
+  return this._safeRegexList(this.muteDisplayNamePatterns).length > 0;
+};
+
 app.isMutedEvent = function(ev) {
   if (!ev) return false;
-  if (this.mutedPubkeys && this.mutedPubkeys.has(ev.pubkey)) return true;
+  if (this.mutedPubkeys && this.mutedPubkeys.has(String(ev.pubkey || '').toLowerCase())) return true;
 
   const profile = this.profiles.get(ev.pubkey) || {};
   const displayName = profile.display_name || profile.name || '';
   const content = ev.content || '';
 
-  if (this._safeRegexList(this.muteDisplayNamePatterns).some(re => re.test(displayName))) return true;
   if (this._safeRegexList(this.muteContentPatterns).some(re => re.test(content))) return true;
+  if (this._safeRegexList(this.muteDisplayNamePatterns).some(re => re.test(displayName))) return true;
   return false;
+};
+
+// 表示してから消すのではなく、表示してよいと確定した投稿だけ .visible を付ける。
+// display_name ミュートが設定されている場合、プロフィール未取得の投稿は
+// ミュート判定不能なので非表示のまま保持し、プロフィール取得後に初めて表示判定する。
+app.canRevealEvent = function(ev, elementOrContainer = null) {
+  if (!ev) return false;
+
+  const inNotifications = elementOrContainer && (
+    (elementOrContainer.id === 'timeline-notifications') ||
+    (elementOrContainer.closest && elementOrContainer.closest('#timeline-notifications'))
+  );
+  if (inNotifications) return true;
+
+  if (this.mutedPubkeys && this.mutedPubkeys.has(String(ev.pubkey || '').toLowerCase())) return false;
+  if (this._safeRegexList(this.muteContentPatterns).some(re => re.test(ev.content || ''))) return false;
+
+  const displayNameRules = this._safeRegexList(this.muteDisplayNamePatterns);
+  if (displayNameRules.length > 0) {
+    const profile = this.profiles.get(ev.pubkey);
+    if (!profile) return false;
+    const displayName = profile.display_name || profile.name || '';
+    if (displayNameRules.some(re => re.test(displayName))) return false;
+  }
+
+  return true;
 };
 
 app.applyMuteVisibility = function(target = document) {
@@ -58,8 +88,7 @@ app.applyMuteVisibility = function(target = document) {
     const id = el.getAttribute('data-event-id');
     const ev = this.eventStorage ? this.eventStorage.get(id) : null;
     if (!ev) return;
-    const inNotifications = el.closest('#timeline-notifications') !== null;
-    el.classList.toggle('visible', inNotifications || !this.isMutedEvent(ev));
+    el.classList.toggle('visible', this.canRevealEvent(ev, el));
   });
 };
 
