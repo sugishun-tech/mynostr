@@ -142,3 +142,8 @@ body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); c
   .right-sidebar { display: none; } /* 右サイドバー非表示 */
   .main-content { max-width: 100%; border: none; } /* 画面幅いっぱいに */
 }
+
+/* 投稿はデフォルト非表示。ミュート判定を通過したものだけ表示する。 */
+.post { display: none; }
+.post.visible { display: flex; }
+.setting-actions { display: flex; gap: 10px; flex-wrap: wrap; }

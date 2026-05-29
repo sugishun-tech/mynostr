@@ -21,9 +21,13 @@ app.login = async function() {
       if (eTag) this.likedIds.add(eTag[1]);
     });
 
-    this.query([{ kinds: [3], authors: [this.myPubkey], limit: 1 }], (ev) => {
-      this.following = new Set(ev.tags.filter(t => t[0] === 'p').map(t => t[1]));
-      if(this.activeTab === 'home') this.fetchFeed('older');
-    });
+    const followEvent = await this.getSingleEvent([{ kinds: [3], authors: [this.myPubkey] }]);
+    if (followEvent) {
+      this.following = new Set(followEvent.tags.filter(t => t[0] === 'p').map(t => t[1]));
+    } else {
+      this.following = new Set();
+    }
+
+    if (this.activeTab === 'home') this.fetchFeed('older');
   } catch (e) { console.error("Login failed:", e); }
 };

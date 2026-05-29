@@ -24,3 +24,40 @@ app.formatTime = function(unix) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
+
+app._splitLines = function(text) {
+  return String(text || '').split('\n').map(s => s.trim()).filter(Boolean);
+};
+
+app._safeRegexList = function(patterns) {
+  return (patterns || []).map(pattern => {
+    try {
+      return new RegExp(pattern, 'i');
+    } catch (e) {
+      console.warn('Invalid mute regex ignored:', pattern, e);
+      return null;
+    }
+  }).filter(Boolean);
+};
+
+app.isMutedEvent = function(ev) {
+  if (!ev) return false;
+  if (this.mutedPubkeys && this.mutedPubkeys.has(ev.pubkey)) return true;
+
+  const profile = this.profiles.get(ev.pubkey) || {};
+  const displayName = profile.display_name || profile.name || '';
+  const content = ev.content || '';
+
+  if (this._safeRegexList(this.muteDisplayNamePatterns).some(re => re.test(displayName))) return true;
+  if (this._safeRegexList(this.muteContentPatterns).some(re => re.test(content))) return true;
+  return false;
+};
+
+app.applyMuteVisibility = function(target = document) {
+  target.querySelectorAll('.post').forEach(el => {
+    const id = el.getAttribute('data-event-id');
+    const ev = this.eventStorage ? this.eventStorage.get(id) : null;
+    if (!ev) return;
+    el.classList.toggle('visible', !this.isMutedEvent(ev));
+  });
+};

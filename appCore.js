@@ -12,6 +12,9 @@ export const app = {
   nip05Status: new Map(),
   likedIds: new Set(),
   following: new Set(),
+  muteDisplayNamePatterns: [],
+  muteContentPatterns: [],
+  mutedPubkeys: new Set(),
   
   activeTab: 'public',
   previousTab: null,

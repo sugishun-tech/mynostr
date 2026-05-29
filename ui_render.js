@@ -9,6 +9,7 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
 
   if (ev.kind === 7 && containerId !== 'timeline-notifications') return;
   if (container.querySelector(`[data-event-id="${ev.id}"]`)) return;
+  if (this.eventStorage) this.eventStorage.set(ev.id, ev);
 
   const profile = this.profiles.get(ev.pubkey) || {};
   const isLiked = this.likedIds ? this.likedIds.has(ev.id) : false;
@@ -64,8 +65,10 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
     }
   }
 
+  const visibleClass = this.isMutedEvent(ev) ? '' : ' visible';
+
   const html = `
-    <div class="post main-post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
+    <div class="post main-post${visibleClass}" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
       <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
       <div class="post-content">
         ${replyContextHtml}
@@ -108,6 +111,8 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
 app.renderNotification = function(ev) {
   const container = document.getElementById('timeline-notifications');
   if (!container || container.querySelector(`[data-event-id="${ev.id}"]`)) return;
+  if (this.eventStorage) this.eventStorage.set(ev.id, ev);
+  const visibleClass = this.isMutedEvent(ev) ? '' : ' visible';
   
   if (ev.kind === 7) {
     const eTag = ev.tags.find(t => t[0] === 'e');
@@ -120,7 +125,7 @@ app.renderNotification = function(ev) {
     const sName = "@" + (profile.name || ev.pubkey.slice(0, 8) + '...');
 
     const html = `
-      <div class="post" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${targetId}')">
+      <div class="post${visibleClass}" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${targetId}')">
         <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
         <div class="post-content">
           <div class="post-header">
@@ -183,6 +188,9 @@ app.updateUIPost = function(pubkey) {
       if (img && p.picture) img.src = this.esc(p.picture);
       if (nameEl) nameEl.innerHTML = this.esc(dName) + badgeHtml;
       if (idEl) idEl.innerText = this.esc(sName);
+      const id = el.getAttribute('data-event-id');
+      const ev = this.eventStorage ? this.eventStorage.get(id) : null;
+      if (ev) el.classList.toggle('visible', !this.isMutedEvent(ev));
     }
   });
 };

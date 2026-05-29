@@ -89,7 +89,23 @@
                 <label>一度に読み込む件数 (N)</label>
                 <input type="number" id="batch-input" value="30">
               </div>
-              <button class="btn-primary" onclick="app.saveSettings()">保存してリロード</button>
+              <div class="setting-item">
+                <label>ミュートワード(display_name) 正規表現・1行に1つ</label>
+                <textarea id="mute-display-name-input" rows="5"></textarea>
+              </div>
+              <div class="setting-item">
+                <label>ミュートワード(投稿内容) 正規表現・1行に1つ</label>
+                <textarea id="mute-content-input" rows="5"></textarea>
+              </div>
+              <div class="setting-item">
+                <label>ミュート公開鍵hex・1行に1つ</label>
+                <textarea id="mute-pubkey-input" rows="5"></textarea>
+              </div>
+              <div class="setting-actions">
+                <button class="btn-primary" onclick="app.saveSettings()">保存してリロード</button>
+                <button class="btn-secondary" onclick="app.exportSettings()">JSONエクスポート</button>
+                <button class="btn-secondary" onclick="app.importSettings()">JSONインポート</button>
+              </div>
             </div>
           </section>
 

@@ -7,7 +7,6 @@ app._eventTimer = app._eventTimer || null;
 
 app.connectRelays = function() {};
 
-// network.js
 app.broadcast = async function(signedEvent) {
   console.log("Broadcasting to:", this.relayUrls);
 
@@ -16,20 +15,12 @@ app.broadcast = async function(signedEvent) {
     return;
   }
 
-  // nostr-tools v2系以降の仕様:
-  // pool.publish は各リレーの Promise 配列を返すのではなく、
-  // 内部で複数のリレーへ送信を開始します。
   try {
-    // 確実に送信を試みるための Promise.any
-    // pool.publish() の結果を await することで、
-    // 少なくとも一つのリレーに到達した時点で成功とみなします。
     await Promise.any(this.pool.publish(this.relayUrls, signedEvent));
-    
     console.log("[SUCCESS] Event published successfully to at least one relay.");
   } catch (e) {
-    // すべてのリレーで失敗した場合は AggregateError が発生します
     console.error("[FAILED] Could not publish to any relay:", e);
-    throw e; 
+    throw e;
   }
 };
 
@@ -40,16 +31,10 @@ app.broadcast_old = async function(signedEvent) {
   }
 
   console.log("Broadcasting event:", signedEvent);
-
-  // 全リレーに対して一斉送信
   const pubs = this.pool.publish(this.relayUrls, signedEvent);
-  
-  // 成功を確認するための Promise 配列
   const promises = pubs.map(pub => {
     return new Promise((resolve, reject) => {
-      // タイムアウト設定（5秒反応がなければ失敗とみなす）
       const timeout = setTimeout(() => reject(new Error("Timeout")), 5000);
-      
       pub.on('ok', () => {
         clearTimeout(timeout);
         resolve();
@@ -62,74 +47,86 @@ app.broadcast_old = async function(signedEvent) {
   });
 
   try {
-    // 少なくとも一つのリレーが受け取れば成功とする
     await Promise.any(promises);
     console.log("Broadcast successful at least one relay");
   } catch (e) {
     console.error("Broadcast failed on all relays:", e);
-    // ユーザーに通知するために例外を投げる
     throw e;
   }
 };
 
-/**
- * タイムライン取得
- * fetchLatestEvents が until を無視するリレー対策として
- * fetchAllEvents を使い、自前で limit 制御を行います。
- */
-// network.js
-app.query = async function(filters, onEvent) {
-  const rawFilter = filters[0];
-  const fetchLimit = rawFilter.limit || 30;
+app._matchesFilter = function(ev, filter) {
+  if (filter.ids && !filter.ids.includes(ev.id)) return false;
+  if (filter.kinds && !filter.kinds.includes(ev.kind)) return false;
+  if (filter.authors && !filter.authors.includes(ev.pubkey)) return false;
+  if (filter.since && ev.created_at < filter.since) return false;
+  if (filter.until && ev.created_at > filter.until) return false;
 
-  console.log(`[DEBUG] query START: until=${rawFilter.until || 'now'}, limit=${fetchLimit}`);
+  for (const key of Object.keys(filter)) {
+    if (!key.startsWith('#')) continue;
+    const tagName = key.slice(1);
+    const values = filter[key];
+    const hasTag = (ev.tags || []).some(t => t[0] === tagName && values.includes(t[1]));
+    if (!hasTag) return false;
+  }
+  return true;
+};
+
+/**
+ * タイムライン取得。
+ * - filters[0] だけではなく、分割filterを全部処理する。
+ * - 1つの巨大authors filterを避けるため、feed.js側で分割したfilter配列を受け取れる。
+ * - EOSEを即終了扱いにしない。速いリレーだけで打ち切ると、ホームタイムラインが飛び飛びになるため。
+ */
+app.query = async function(filters, onEvent) {
+  const rawFilters = (Array.isArray(filters) ? filters : [filters]).filter(Boolean);
+  if (rawFilters.length === 0) return [];
+
+  const limits = rawFilters.map(f => Number(f.limit || 0)).filter(n => n > 0);
+  const fetchLimit = limits.length > 0 ? Math.max(...limits) : null;
+  const shouldLimitFinal = fetchLimit !== null;
+
+  console.log(`[DEBUG] query START: filters=${rawFilters.length}, limit=${fetchLimit || 'none'}`);
 
   try {
     return new Promise((resolve) => {
-      const events = [];
-      
-      // nostr-tools v1.17.0 の仕様に合わせて .sub() を使用します
-      const sub = this.pool.sub(this.relayUrls, [rawFilter]);
+      const eventMap = new Map();
+      const sub = this.pool.sub(this.relayUrls, rawFilters);
+      let isFinished = false;
+      let eoseTimer = null;
 
-      // イベント受信時の処理
       sub.on('event', (ev) => {
-        // until や since を無視する一部のポンコツリレー対策
-        if (rawFilter.until && ev.created_at > rawFilter.until) return;
-        if (rawFilter.since && ev.created_at < rawFilter.since) return;
-
-        // 重複チェックをしてから配列に追加
-        if (!events.some(e => e.id === ev.id)) {
-          events.push(ev);
-        }
+        if (!rawFilters.some(filter => this._matchesFilter(ev, filter))) return;
+        if (!eventMap.has(ev.id)) eventMap.set(ev.id, ev);
       });
 
-      let isFinished = false;
       const finish = () => {
         if (isFinished) return;
         isFinished = true;
-        // v1系では .close() ではなく .unsub() で通信を閉じます
-        sub.unsub(); 
-        
-        // 時間の新しい順にソートして、きっちり fetchLimit 件（30件など）だけ抽出
-        events.sort((a, b) => b.created_at - a.created_at);
-        const finalEvents = events.slice(0, fetchLimit);
-        
-        // ソート済みの綺麗な状態からUIへ一気に描画
+        if (eoseTimer) clearTimeout(eoseTimer);
+        sub.unsub();
+
+        let finalEvents = Array.from(eventMap.values()).sort((a, b) => {
+          if (b.created_at !== a.created_at) return b.created_at - a.created_at;
+          return b.id.localeCompare(a.id);
+        });
+
+        if (shouldLimitFinal) finalEvents = finalEvents.slice(0, fetchLimit);
+
         finalEvents.forEach(ev => {
           if (onEvent) onEvent(ev);
         });
-        
+
         console.log(`[DEBUG] query END: fetched ${finalEvents.length} events.`);
-        resolve(finalEvents); // feed.js の state 更新用に配列を返す
+        resolve(finalEvents);
       };
 
-      // リレーから「これ以上データはないよ(End of Stored Events)」の合図が来たら終了処理へ
       sub.on('eose', () => {
-        finish();
+        if (eoseTimer) clearTimeout(eoseTimer);
+        eoseTimer = setTimeout(finish, 900);
       });
 
-      // 3秒経過したら強制終了（反応の遅いリレーを無限に待ってタイムラインが止まるのを防ぐ）
-      setTimeout(finish, 3000);
+      setTimeout(finish, 5000);
     });
   } catch (e) {
     console.error("[DEBUG] query FATAL:", e);
