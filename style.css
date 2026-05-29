@@ -144,6 +144,6 @@ body, html { margin: 0; padding: 0; height: 100%; background: var(--bg-color); c
 }
 
 /* 投稿はデフォルト非表示。ミュート判定を通過したものだけ表示する。 */
-.post { display: none; }
-.post.visible { display: flex; }
+.post { display: none !important; }
+.post.visible { display: flex !important; }
 .setting-actions { display: flex; gap: 10px; flex-wrap: wrap; }

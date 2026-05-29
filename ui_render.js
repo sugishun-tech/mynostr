@@ -66,7 +66,9 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   }
 
   const skipMute = containerId === 'timeline-notifications';
-  const visibleClass = (skipMute || !this.isMutedEvent(ev)) ? ' visible' : '';
+  const profileKnown = this.profiles.has(ev.pubkey);
+  const visibleClass = (skipMute || (profileKnown && !this.isMutedEvent(ev))) ? ' visible' : '';
+  const shouldFetchProfile = !profileKnown;
 
   const html = `
     <div class="post main-post${visibleClass}" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
@@ -103,7 +105,7 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   if (nextElement) container.insertBefore(newPostEl, nextElement);
   else container.appendChild(newPostEl);
 
-  if (!this.profiles.has(ev.pubkey)) {
+  if (shouldFetchProfile) {
     this.fetchProfile(ev.pubkey, () => this.updateUIPost(ev.pubkey));
   }
 };
