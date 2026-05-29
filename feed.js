@@ -70,27 +70,27 @@ app.fetchFeed = async function(direction) {
   const containerId = tab === 'notifications' ? 'timeline-notifications' : `timeline-${tab}`;
   const container = document.getElementById(containerId);
 
-  const fetchedEvents = await this.query(filters, (event) => {
-    if (container && container.querySelector(`.main-post[data-event-id="${event.id}"]`)) return;
+  const fetchedEvents = await this.query(filters);
+  const eventsToRender = (fetchedEvents || []).filter(event => {
+    if (container && container.querySelector(`[data-event-id="${event.id}"]`)) return false;
     if (this.eventStorage) this.eventStorage.set(event.id, event);
-
     if (event.created_at > state.newest) state.newest = event.created_at;
-
-    if (tab === 'notifications') {
-      this.renderNotification(event);
-    } else {
-      this.renderPost(event, false, containerId);
-    }
+    return true;
   });
 
-  if (fetchedEvents && fetchedEvents.length > 0) {
-    const sorted = fetchedEvents.sort((a, b) => b.created_at - a.created_at);
+  const sorted = eventsToRender.sort((a, b) => {
+    if (b.created_at !== a.created_at) return b.created_at - a.created_at;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
+  if (sorted.length > 0) {
     const oldestInBatch = sorted[sorted.length - 1].created_at;
     if (direction === 'older' || state.oldest === 0) {
       state.oldest = oldestInBatch - 1;
     } else if (direction === 'latest' && oldestInBatch < state.oldest) {
       state.oldest = oldestInBatch - 1;
     }
+    this.renderSortedEvents(sorted, containerId);
   } else if (direction === 'older') {
     state.oldest -= 3600;
   }

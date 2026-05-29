@@ -62,3 +62,42 @@ app.applyMuteVisibility = function(target = document) {
     el.classList.toggle('visible', inNotifications || !this.isMutedEvent(ev));
   });
 };
+
+
+app.sortTimelineContainer = function(container) {
+  if (!container) return;
+  const posts = Array.from(container.children).filter(el => el.classList && el.classList.contains('post'));
+  posts.sort((a, b) => {
+    const at = parseInt(a.getAttribute('data-timestamp') || '0', 10);
+    const bt = parseInt(b.getAttribute('data-timestamp') || '0', 10);
+    if (bt !== at) return bt - at;
+    return String(b.getAttribute('data-event-id') || '').localeCompare(String(a.getAttribute('data-event-id') || ''));
+  });
+  const frag = document.createDocumentFragment();
+  posts.forEach(el => frag.appendChild(el));
+  container.appendChild(frag);
+};
+
+app.renderSortedEvents = function(events, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !Array.isArray(events) || events.length === 0) return;
+
+  const sorted = [...events].sort((a, b) => {
+    if (b.created_at !== a.created_at) return b.created_at - a.created_at;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
+  const previousRenderingBatch = this._renderingBatch;
+  this._renderingBatch = true;
+  try {
+    sorted.forEach(ev => {
+      if (containerId === 'timeline-notifications') this.renderNotification(ev);
+      else this.renderPost(ev, false, containerId);
+    });
+    this.sortTimelineContainer(container);
+  } finally {
+    this._renderingBatch = previousRenderingBatch;
+  }
+
+  this.applyMuteVisibility(container);
+};

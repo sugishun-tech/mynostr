@@ -67,7 +67,7 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
 
   const skipMute = containerId === 'timeline-notifications';
   const profileKnown = this.profiles.has(ev.pubkey);
-  const visibleClass = (skipMute || (profileKnown && !this.isMutedEvent(ev))) ? ' visible' : '';
+  const visibleClass = (!this._renderingBatch && (skipMute || (profileKnown && !this.isMutedEvent(ev)))) ? ' visible' : '';
   const shouldFetchProfile = !profileKnown;
 
   const html = `
@@ -115,7 +115,7 @@ app.renderNotification = function(ev) {
   const container = document.getElementById('timeline-notifications');
   if (!container || container.querySelector(`[data-event-id="${ev.id}"]`)) return;
   if (this.eventStorage) this.eventStorage.set(ev.id, ev);
-  const visibleClass = ' visible';
+  const visibleClass = this._renderingBatch ? '' : ' visible';
   
   if (ev.kind === 7) {
     const eTag = ev.tags.find(t => t[0] === 'e');
