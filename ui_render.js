@@ -65,7 +65,8 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
     }
   }
 
-  const visibleClass = this.isMutedEvent(ev) ? '' : ' visible';
+  const skipMute = containerId === 'timeline-notifications';
+  const visibleClass = (skipMute || !this.isMutedEvent(ev)) ? ' visible' : '';
 
   const html = `
     <div class="post main-post${visibleClass}" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="if(!window.getSelection().toString()) { app.openThread('${ev.id}'); }">
@@ -112,7 +113,7 @@ app.renderNotification = function(ev) {
   const container = document.getElementById('timeline-notifications');
   if (!container || container.querySelector(`[data-event-id="${ev.id}"]`)) return;
   if (this.eventStorage) this.eventStorage.set(ev.id, ev);
-  const visibleClass = this.isMutedEvent(ev) ? '' : ' visible';
+  const visibleClass = ' visible';
   
   if (ev.kind === 7) {
     const eTag = ev.tags.find(t => t[0] === 'e');
@@ -190,7 +191,10 @@ app.updateUIPost = function(pubkey) {
       if (idEl) idEl.innerText = this.esc(sName);
       const id = el.getAttribute('data-event-id');
       const ev = this.eventStorage ? this.eventStorage.get(id) : null;
-      if (ev) el.classList.toggle('visible', !this.isMutedEvent(ev));
+      if (ev) {
+        const inNotifications = el.closest('#timeline-notifications') !== null;
+        el.classList.toggle('visible', inNotifications || !this.isMutedEvent(ev));
+      }
     }
   });
 };

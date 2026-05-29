@@ -58,6 +58,7 @@ app.applyMuteVisibility = function(target = document) {
     const id = el.getAttribute('data-event-id');
     const ev = this.eventStorage ? this.eventStorage.get(id) : null;
     if (!ev) return;
-    el.classList.toggle('visible', !this.isMutedEvent(ev));
+    const inNotifications = el.closest('#timeline-notifications') !== null;
+    el.classList.toggle('visible', inNotifications || !this.isMutedEvent(ev));
   });
 };
