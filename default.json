@@ -1,0 +1,41 @@
+{
+  "relays": [
+    "wss://relay-jp.nostr.wirednet.jp/",
+    "wss://yabu.me/",
+    "wss://nrelay-jp.c-stellar.net/"
+  ],
+  "batchSize": 30,
+  "muteDisplayNamePatterns": [
+    "[bB][oO][tT]",
+    "切り取り線",
+    "じほう",
+    "まいへや",
+    "Jaqueline Oda Garcia",
+    "兼本わたる",
+    "Yoshimi Shigehiro",
+    "Kiyohito Mikami",
+    "宇和さん",
+    "別たん",
+    "Gaku Hirasawa",
+    "Hideki Nara",
+    "寿限無",
+    "おもち",
+    "べったん",
+    "ロボ",
+    "義彦",
+    "Hiroaki Matsunaga",
+    "Markov Chain",
+    "カラバコ",
+    "電子馬",
+    "ねこ",
+    "シアワセ",
+    "あな"
+  ],
+  "muteContentPatterns": [
+    "http",
+    "nostr\\:",
+    "#",
+    "^[^ぁ-ゖァ-ヶ]*$"
+  ],
+  "mutedPubkeys": []
+}
