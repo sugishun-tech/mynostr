@@ -9,15 +9,16 @@ import './utils.js';
 import './ui_render.js';
 import './ui_nav.js';
 
+
 app.init = async function() {
-  this.loadSettings();
+  await this.loadSettings();
   this.connectRelays();
   this.updateBatchDisplay();
 };
 
-// HTML側からの呼び出し (onclick="app.openProfile(...)" など) が
-// 従来通り動作するように window オブジェクトに紐付ける
+
 window.app = app;
 
-// アプリの起動
-app.init();
+app.init().catch(e => {
+  console.error('アプリの初期化に失敗しました', e);
+});
