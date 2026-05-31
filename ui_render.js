@@ -66,7 +66,7 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   }
 
   const profileKnown = this.profiles.has(ev.pubkey);
-  const visibleClass = (!this._renderingBatch && this.canRevealEvent(ev, container)) ? ' visible' : '';
+  const visibleClass = '';
   const shouldFetchProfile = !profileKnown;
 
   const html = `
@@ -104,6 +104,10 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   if (nextElement) container.insertBefore(newPostEl, nextElement);
   else container.appendChild(newPostEl);
 
+  if (!this._renderingBatch && this.finalizeTimelineVisibility) {
+    this.finalizeTimelineVisibility(container);
+  }
+
   if (shouldFetchProfile) {
     this.fetchProfile(ev.pubkey, () => this.updateUIPost(ev.pubkey));
   }
@@ -114,7 +118,7 @@ app.renderNotification = function(ev) {
   const container = document.getElementById('timeline-notifications');
   if (!container || container.querySelector(`[data-event-id="${ev.id}"]`)) return;
   if (this.eventStorage) this.eventStorage.set(ev.id, ev);
-  const visibleClass = this._renderingBatch ? '' : ' visible';
+  const visibleClass = '';
   
   if (ev.kind === 7) {
     const eTag = ev.tags.find(t => t[0] === 'e');
@@ -151,6 +155,10 @@ app.renderNotification = function(ev) {
     if (nextElement) container.insertBefore(newPostEl, nextElement);
     else container.appendChild(newPostEl);
 
+    if (!this._renderingBatch && this.finalizeTimelineVisibility) {
+      this.finalizeTimelineVisibility(container);
+    }
+
     if (!this.profiles.has(ev.pubkey)) this.fetchProfile(ev.pubkey, () => this.updateUIPost(ev.pubkey));
     if (!targetEv && targetId) this.fetchSingleEvent(targetId);
   } 
@@ -181,6 +189,7 @@ app.updateUIPost = function(pubkey) {
   const sName = "@" + (p.name || pubkey.slice(0, 8) + '...');
   const status = this.nip05Status.get(p.nip05);
   const badgeHtml = status === true ? ` <span class="badge" title="Verified">✅</span>` : (status === false ? ` <span class="badge" title="Invalid">⚠️</span>` : "");
+  const containersToFinalize = new Set();
 
   document.querySelectorAll(`.post`).forEach(el => {
     if (el.innerHTML.includes(`openProfile('${pubkey}')`)) {
@@ -190,12 +199,13 @@ app.updateUIPost = function(pubkey) {
       if (img && p.picture) img.src = this.esc(p.picture);
       if (nameEl) nameEl.innerHTML = this.esc(dName) + badgeHtml;
       if (idEl) idEl.innerText = this.esc(sName);
-      const id = el.getAttribute('data-event-id');
-      const ev = this.eventStorage ? this.eventStorage.get(id) : null;
-      if (ev) {
-        const inNotifications = el.closest('#timeline-notifications') !== null;
-        el.classList.toggle('visible', this.canRevealEvent(ev, el));
-      }
+
+      const container = el.closest('.timeline') || el.parentElement;
+      if (container) containersToFinalize.add(container);
     }
+  });
+
+  containersToFinalize.forEach(container => {
+    if (this.finalizeTimelineVisibility) this.finalizeTimelineVisibility(container);
   });
 };

@@ -92,6 +92,17 @@ app.applyMuteVisibility = function(target = document) {
   });
 };
 
+// 表示確定は必ずこの関数に集約する。
+// 1. いったん visible を全部外す
+// 2. DOM順を timestamp/id で確定する
+// 3. ミュート判定を通過したものだけ visible を付ける
+// これで「表示してからソート」という人類おなじみのチラつき事故を防ぐ。
+app.finalizeTimelineVisibility = function(container) {
+  if (!container) return;
+  container.querySelectorAll('.post.visible').forEach(el => el.classList.remove('visible'));
+  this.sortTimelineContainer(container);
+  this.applyMuteVisibility(container);
+};
 
 app.sortTimelineContainer = function(container) {
   if (!container) return;
@@ -123,10 +134,9 @@ app.renderSortedEvents = function(events, containerId) {
       if (containerId === 'timeline-notifications') this.renderNotification(ev);
       else this.renderPost(ev, false, containerId);
     });
-    this.sortTimelineContainer(container);
   } finally {
     this._renderingBatch = previousRenderingBatch;
   }
 
-  this.applyMuteVisibility(container);
+  this.finalizeTimelineVisibility(container);
 };
