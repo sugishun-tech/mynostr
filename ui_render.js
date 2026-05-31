@@ -19,12 +19,12 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   const sName = "@" + (profile.name || ev.pubkey.slice(0, 8) + '...');
   
   let badgeHtml = "";
-  if (profile.nip05) {
+  /*if (profile.nip05) {
     const status = this.nip05Status.get(profile.nip05);
     if (status === true) badgeHtml = `<span class="badge" title="Verified">✅</span>`;
     else if (status === false) badgeHtml = `<span class="badge" title="Invalid">⚠️</span>`;
     else this.verifyNip05(profile.nip05, ev.pubkey);
-  }
+  }*/
 
   // リプライコンテキスト生成
   let replyContextHtml = '';
