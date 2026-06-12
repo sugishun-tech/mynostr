@@ -28,7 +28,8 @@ app.openThread = async function(eventId) {
   // 2. 主役の投稿を取得 (getSingleEventで即座に取得して待つ)
   const ev = await this.getSingleEvent([{ ids: [eventId] }]);
   if (!ev) return; // 取得失敗時は終了
-  
+
+  if (this.prefetchProfiles) await this.prefetchProfiles([ev]);
   this.renderPost(ev, false, 'thread-main-post');
 
   // 3. 親の取得 (非同期で走らせる)
@@ -37,21 +38,27 @@ app.openThread = async function(eventId) {
     if (eTags.length > 0) {
       const parentTag = eTags.find(t => t[3] === 'reply') || eTags[eTags.length - 1];
       const pEv = await this.getSingleEvent([{ ids: [parentTag[1]] }]);
-      if (pEv) this.renderPost(pEv, false, 'thread-parent-post');
+      if (pEv) {
+        if (this.prefetchProfiles) await this.prefetchProfiles([pEv]);
+        this.renderPost(pEv, false, 'thread-parent-post');
+      }
     }
   };
 
-  // 4. 子（リプライ）の取得 (複数来るので既存のqueryで逐次描画)
-  const fetchReplies = () => {
-    this.query([{ kinds: [1], '#e': [ev.id] }], (childEv) => {
+  // 4. 子（リプライ）の取得。
+  // query完了後にプロフィール取得・時系列ソート・表示判定をまとめて行う。
+  const fetchReplies = async () => {
+    const childEvents = await this.query([{ kinds: [1], '#e': [ev.id] }]);
+    const directReplies = (childEvents || []).filter(childEv => {
       const isDirectReply = childEv.tags.some(t => t[0] === 'e' && t[1] === ev.id);
-      if (isDirectReply) {
-        if (containers.replies && containers.replies.classList.contains('hidden')) {
-          containers.replies.classList.remove('hidden');
-        }
-        this.renderPost(childEv, false, 'timeline-thread');
-      }
+      return isDirectReply;
     });
+
+    if (directReplies.length > 0 && containers.replies && containers.replies.classList.contains('hidden')) {
+      containers.replies.classList.remove('hidden');
+    }
+
+    if (this.renderSortedEvents) await this.renderSortedEvents(directReplies, 'timeline-thread');
   };
 
   // 親の取得と子の取得を同時にスタート

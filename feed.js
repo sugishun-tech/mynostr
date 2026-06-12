@@ -90,7 +90,7 @@ app.fetchFeed = async function(direction) {
     } else if (direction === 'latest' && oldestInBatch < state.oldest) {
       state.oldest = oldestInBatch - 1;
     }
-    this.renderSortedEvents(sorted, containerId);
+    await this.renderSortedEvents(sorted, containerId);
   } else if (direction === 'older') {
     state.oldest -= 3600;
   }
