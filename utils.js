@@ -1,5 +1,4 @@
 import { app } from './appCore.js';
-
 // 文字列のエスケープ処理
 app.esc = function(str) {
   if (!str) return '';
@@ -78,10 +77,12 @@ app.isMutedEvent = function(ev) {
 
   const profile = this.profiles.get(ev.pubkey) || {};
   const displayName = this.hasUsableDisplayName(profile) ? profile.display_name.trim() : '';
+  const pname = profile.name.trim(); 
   const content = ev.content || '';
 
   if (this._safeRegexList(this.muteContentPatterns).some(re => re.test(content))) return true;
   if (this._safeRegexList(this.muteDisplayNamePatterns).some(re => re.test(displayName))) return true;
+  if (this._safeRegexList(this.muteDisplayNamePatterns).some(re => re.test(pname))) return true;  
   return false;
 };
 
@@ -105,8 +106,9 @@ app.canRevealEvent = function(ev, elementOrContainer = null) {
 
   const displayNameRules = this._safeRegexList(this.muteDisplayNamePatterns);
   const displayName = profile.display_name.trim();
+  const pname = profile.name.trim()  
   if (displayNameRules.some(re => re.test(displayName))) return false;
-
+  if (displayNameRules.some(re => re.test(pname))) return false;
   return true;
 };
 
