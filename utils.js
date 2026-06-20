@@ -51,6 +51,15 @@ app.hasUsableDisplayName = function(profile) {
   );
 };
 
+app.hasUsableName = function(profile) {
+  return !!(
+    profile &&
+    typeof profile.name === 'string' &&
+    profile.name.trim().length > 0
+  );
+};
+
+
 app.prefetchProfiles = async function(events) {
   if (!Array.isArray(events) || !this.fetchProfile) return;
 
@@ -77,7 +86,7 @@ app.isMutedEvent = function(ev) {
 
   const profile = this.profiles.get(ev.pubkey) || {};
   const displayName = this.hasUsableDisplayName(profile) ? profile.display_name.trim() : '';
-  const pname = profile.name.trim(); 
+  const pname = this.hasUsableName(profile) ? profile.name.trim() : ''; 
   const content = ev.content || '';
 
   if (this._safeRegexList(this.muteContentPatterns).some(re => re.test(content))) return true;
@@ -102,8 +111,7 @@ app.canRevealEvent = function(ev, elementOrContainer = null) {
   if (this._safeRegexList(this.muteContentPatterns).some(re => re.test(ev.content || ''))) return false;
 
   const profile = this.profiles.get(ev.pubkey);
-  if (!this.hasUsableDisplayName(profile)) return false;
-
+  if (!this.hasUsableDisplayName(profile) || !this.hasUsableName(profile)) return false;
   const displayNameRules = this._safeRegexList(this.muteDisplayNamePatterns);
   const displayName = profile.display_name.trim();
   const pname = profile.name.trim()  
