@@ -1,8 +1,7 @@
 {
   "relays": [
     "wss://relay-jp.nostr.wirednet.jp/",
-    "wss://yabu.me/",
-    "wss://nrelay-jp.c-stellar.net/"
+    "wss://yabu.me/"
   ],
   "batchSize": 30,
   "muteDisplayNamePatterns": [
@@ -35,7 +34,12 @@
     "のすたろう",
     "Gray",
     "やぶみ",
-    "nobody"
+    "nobody",
+    "ルリ",
+    "佐藤",
+    "Noriko",
+    "haruki7049",
+    "αυγοτάραχο"
   ],
   "muteContentPatterns": [
     "https",
