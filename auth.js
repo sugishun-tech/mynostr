@@ -28,6 +28,10 @@ app.login = async function() {
       this.following = new Set();
     }
 
-    if (this.activeTab === 'home') this.fetchFeed('older');
+    const currentTab = this.getCurrentTab();
+    if (currentTab === 'home' || currentTab === 'notifications') {
+      const container = document.getElementById(`timeline-${currentTab}`);
+      if (!container || container.children.length === 0) this.fetchFeed('older');
+    }
   } catch (e) { console.error("Login failed:", e); }
 };

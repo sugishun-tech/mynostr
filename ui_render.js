@@ -3,7 +3,9 @@ import { DEFAULT_CONFIG } from './config.js';
 
 // 投稿の描画（タイムラインへの挿入）
 app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
-  const containerId = targetContainerId || `timeline-${this.activeTab}`;
+  if (!ev || !this.isValidEventId(ev.id) || !this.isValidEventId(ev.pubkey)) return;
+
+  const containerId = targetContainerId || `timeline-${this.getCurrentTab()}`;
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -14,6 +16,8 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   const profile = this.profiles.get(ev.pubkey) || {};
   const isLiked = this.likedIds ? this.likedIds.has(ev.id) : false;
   const timeStr = this.formatTime(ev.created_at);
+  const clientLabelHtml = this.getClientLabelHtml ? this.getClientLabelHtml(ev) : '';
+  const threadHref = this.getThreadPermalink(ev.id);
   
   const dName = profile.display_name || profile.name || "npub...";
   const sName = "@" + (profile.name || ev.pubkey.slice(0, 8) + '...');
@@ -33,25 +37,26 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
   
   if (eTags.length > 0) {
     const replyTag = eTags.find(t => t.length > 3 && t[3] === 'reply') || eTags[eTags.length - 1];
-    parentId = replyTag[1];
+    if (replyTag && this.isValidEventId(replyTag[1])) parentId = replyTag[1].toLowerCase();
   }
 
   if (parentId && containerId !== 'thread-parent-post') {
     const parentEv = this.eventStorage ? this.eventStorage.get(parentId) : null;
+    const parentHref = this.getThreadPermalink(parentId);
     if (parentEv) {
       const pProfile = this.profiles.get(parentEv.pubkey) || {};
       const pName = pProfile.display_name || pProfile.name || "npub...";
       const snippet = parentEv.content.replace(/\n/g, ' ').substring(0, 40) + '...';
       replyContextHtml = `
-        <div class="reply-context preview" onclick="if(!window.getSelection().toString()) { app.openThread('${parentId}'); } event.stopPropagation();">
+        <a class="reply-context preview" href="${this.esc(parentHref)}" onclick="event.stopPropagation(); return app.handleThreadLink(event, '${parentId}');">
           <img src="${this.esc(pProfile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-tiny" loading="lazy">
           <span class="snippet">${this.esc(pName)} - ${this.esc(snippet)}</span>
-        </div>`;
+        </a>`;
     } else {
       replyContextHtml = `
-        <div class="reply-context preview" id="reply-preview-${ev.id}" onclick="if(!window.getSelection().toString()) { app.openThread('${parentId}'); } event.stopPropagation();">
+        <a class="reply-context preview" id="reply-preview-${ev.id}" href="${this.esc(parentHref)}" onclick="event.stopPropagation(); return app.handleThreadLink(event, '${parentId}');">
           <span class="snippet">返信元を取得中...</span>
-        </div>`;
+        </a>`;
       if (this.fetchEventBatched) {
         this.fetchEventBatched(parentId, (pEv) => {
           if (!pEv) return;
@@ -79,11 +84,14 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
             <span class="user-name pubkey-${ev.pubkey}">${this.esc(dName)}${badgeHtml}</span>
             <span class="user-id nip05-${ev.pubkey}">${this.esc(sName)}</span>
           </div>
-          <span class="post-time" title="${new Date(ev.created_at * 1000).toLocaleString()}">· ${timeStr}</span>
+          <div class="post-meta">
+            ${clientLabelHtml}
+            <span class="post-time" title="${new Date(ev.created_at * 1000).toLocaleString()}">· ${timeStr}</span>
+          </div>
         </div>
         <div class="post-text">${this.esc(ev.content)}</div>
         <div class="post-actions">
-          <button class="action-btn" onclick="app.openThread('${ev.id}'); event.stopPropagation();">💬</button>
+          <a class="action-btn" href="${this.esc(threadHref)}" onclick="event.stopPropagation(); return app.handleThreadLink(event, '${ev.id}');">💬</a>
           <button class="action-btn heart-btn ${isLiked ? 'liked' : ''}" onclick="app.toggleLike('${ev.id}', '${ev.pubkey}'); event.stopPropagation();">
             ${isLiked ? '♥' : '♡'}
           </button>
@@ -115,29 +123,39 @@ app.renderPost = function(ev, _prependIgnore, targetContainerId = null) {
 
 // 通知の描画
 app.renderNotification = function(ev) {
+  if (!ev || !this.isValidEventId(ev.id) || !this.isValidEventId(ev.pubkey)) return;
+
   const container = document.getElementById('timeline-notifications');
   if (!container || container.querySelector(`[data-event-id="${ev.id}"]`)) return;
   if (this.eventStorage) this.eventStorage.set(ev.id, ev);
   const visibleClass = '';
   
   if (ev.kind === 7) {
-    const eTag = ev.tags.find(t => t[0] === 'e');
-    const targetId = eTag ? eTag[1] : null;
+    const eTag = Array.isArray(ev.tags) ? ev.tags.find(t => Array.isArray(t) && t[0] === 'e') : null;
+    const targetId = eTag && this.isValidEventId(eTag[1]) ? eTag[1].toLowerCase() : null;
     const profile = this.profiles.get(ev.pubkey) || {};
     const targetEv = this.eventStorage ? this.eventStorage.get(targetId) : null;
     const snippet = targetEv ? targetEv.content.replace(/\n/g, ' ') : "あなたの投稿";
     
     const dName = profile.display_name || profile.name || "誰か";
     const sName = "@" + (profile.name || ev.pubkey.slice(0, 8) + '...');
+    const clientLabelHtml = this.getClientLabelHtml ? this.getClientLabelHtml(ev) : '';
+    const timeStr = this.formatTime(ev.created_at);
 
     const html = `
       <div class="post${visibleClass}" data-event-id="${ev.id}" data-timestamp="${ev.created_at}" onclick="app.openThread('${targetId}')">
         <img src="${this.esc(profile.picture || DEFAULT_CONFIG.defaultIcon)}" class="avatar-sm" onclick="app.openProfile('${ev.pubkey}'); event.stopPropagation();" loading="lazy">
         <div class="post-content">
           <div class="post-header">
-            <span class="user-name pubkey-${ev.pubkey}">${this.esc(dName)}</span>
-            <span class="user-id nip05-${ev.pubkey}">${this.esc(sName)}</span>
-            <span style="margin-left: 5px; font-size: 14px; color: var(--text-sub);">さんがいいねしました ❤️</span>
+            <div class="header-user-info">
+              <span class="user-name pubkey-${ev.pubkey}">${this.esc(dName)}</span>
+              <span class="user-id nip05-${ev.pubkey}">${this.esc(sName)}</span>
+              <span class="notification-action">さんがいいねしました ❤️</span>
+            </div>
+            <div class="post-meta">
+              ${clientLabelHtml}
+              <span class="post-time" title="${new Date(ev.created_at * 1000).toLocaleString()}">· ${timeStr}</span>
+            </div>
           </div>
           <div class="reply-context"><span class="snippet">${this.esc(snippet)}</span></div>
         </div>
@@ -169,6 +187,8 @@ app.renderNotification = function(ev) {
 
 // UIの事後更新（リプライ先、プロフィール等）
 app.updateReplyPreview = function(childId, parentEv) {
+  if (!this.isValidEventId(childId) || !parentEv || !this.isValidEventId(parentEv.pubkey)) return;
+
   const el = document.getElementById(`reply-preview-${childId}`);
   if (!el) return;
   const pProfile = this.profiles.get(parentEv.pubkey) || {};

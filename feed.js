@@ -22,10 +22,6 @@ app._buildFeedFilters = function(tab, direction, state) {
       filters = this._chunkArray(authors, 50).map(chunk => ({ ...base, authors: chunk }));
       break;
     }
-    case 'profile':
-      if (!this.currentProfilePubkey) return [];
-      filters = [{ ...base, authors: [this.currentProfilePubkey] }];
-      break;
     case 'notifications':
       if (!this.myPubkey) {
         alert("ログインが必要です");
@@ -34,7 +30,11 @@ app._buildFeedFilters = function(tab, direction, state) {
       filters = [{ "#p": [this.myPubkey], kinds: [1, 7] }];
       break;
     case 'thread':
-      filters = [{ "#e": [this.currentThreadId], kinds: [1] }];
+      {
+        const threadId = this.getCurrentThreadId ? this.getCurrentThreadId() : null;
+        if (!threadId) return [];
+        filters = [{ "#e": [threadId], kinds: [1] }];
+      }
       break;
     default:
       filters = [base];
@@ -62,8 +62,9 @@ app._buildFeedFilters = function(tab, direction, state) {
 };
 
 app.fetchFeed = async function(direction) {
-  const tab = this.activeTab;
+  const tab = this.getCurrentTab();
   const state = this.state[tab];
+  if (!state) return;
   const filters = this._buildFeedFilters(tab, direction, state);
   if (filters.length === 0) return;
 

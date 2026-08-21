@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>mynostr</title>
-    <link rel="stylesheet" href="style.css?20260531v1">
-    <script type="module" src="main.js?202606151359"></script>
+    <link rel="stylesheet" href="style.css?20260821v2">
+    <script type="module" src="main.js?20260821v2"></script>
   </head>
   <body>
     <div class="app-container">
@@ -13,10 +13,10 @@
         <div class="sidebar-inner">
           <div class="logo">mynostr</div>
           <ul class="nav-links">
-            <li id="nav-public" class="active" onclick="app.switchTab('public')"><span class="icon">🌍</span> グローバル</li>
-            <li id="nav-home" onclick="app.switchTab('home')"><span class="icon">🏠</span> ホーム</li>
-            <li id="nav-notifications" onclick="app.switchTab('notifications')"><span class="icon">🔔</span> 通知</li>
-            <li id="nav-setting" onclick="app.switchTab('setting')"><span class="icon">⚙️</span> 設定</li>
+            <li id="nav-public" class="active"><a href="?view=global" onclick="return app.handleRouteLink(event, 'global')"><span class="icon">🌍</span> グローバル</a></li>
+            <li id="nav-home"><a href="?view=home" onclick="return app.handleRouteLink(event, 'home')"><span class="icon">🏠</span> ホーム</a></li>
+            <li id="nav-notifications"><a href="?view=notifications" onclick="return app.handleRouteLink(event, 'notifications')"><span class="icon">🔔</span> 通知</a></li>
+            <li id="nav-setting"><a href="?view=settings" onclick="return app.handleRouteLink(event, 'settings')"><span class="icon">⚙️</span> 設定</a></li>
           </ul>
           <div class="user-info">
             <button id="login-btn" class="btn-primary" onclick="app.login()">NIP-07 ログイン</button>
@@ -34,7 +34,7 @@
       <main class="main-content">
         <header class="sticky-controls">
           <div id="header-title" class="header-title">グローバル</div>
-          <div class="control-group">
+          <div id="feed-controls" class="control-group">
             <button class="btn-primary" onclick="app.fetchFeed('latest')">⬆ 最新</button>
             <button class="btn-secondary" onclick="app.fetchFeed('newer')">🔼 <span class="batch-num">30</span>件</button>
             <button class="btn-secondary" onclick="app.fetchFeed('older')">🔽 <span class="batch-num">30</span>件</button>
@@ -58,7 +58,7 @@
           <div id="timeline-home" class="timeline hidden"></div>
           <div id="timeline-notifications" class="timeline hidden"></div>
           <section id="page-thread" class="hidden">
-            <button class="btn-secondary back-btn" onclick="app.switchTab('public')">← 戻る</button>
+            <a id="thread-back-link" class="btn-secondary back-btn" href="?view=global" onclick="return app.handleBackLink(event)">← 戻る</a>
             
             <div id="thread-parent-post"></div>
             

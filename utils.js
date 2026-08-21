@@ -1,8 +1,47 @@
 import { app } from './appCore.js';
+import { CLIENT_NAME_MAX_LENGTH } from './config.js';
+
 // 文字列のエスケープ処理
 app.esc = function(str) {
-  if (!str) return '';
-  return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+};
+
+// NIP の client タグから表示用のクライアント名を取り出す。
+// 制御文字・双方向テキスト制御文字を除去し、Unicode コードポイント単位で切り詰める。
+app.getClientDisplayName = function(ev) {
+  if (!ev || !Array.isArray(ev.tags)) return '';
+
+  const tag = ev.tags.find(t => (
+    Array.isArray(t) &&
+    t[0] === 'client' &&
+    typeof t[1] === 'string'
+  ));
+  if (!tag) return '';
+
+  let name = tag[1]
+    .slice(0, CLIENT_NAME_MAX_LENGTH * 16)
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!name) return '';
+
+  const chars = Array.from(name);
+  if (chars.length > CLIENT_NAME_MAX_LENGTH) {
+    name = chars.slice(0, CLIENT_NAME_MAX_LENGTH - 1).join('') + '…';
+  }
+  return name;
+};
+
+app.getClientLabelHtml = function(ev) {
+  const name = this.getClientDisplayName(ev);
+  if (!name) return '';
+
+  const safeName = this.esc(name);
+  return `<span class="post-client" title="投稿クライアント: ${safeName}">via ${safeName}</span>`;
 };
 
 // HTML文字列をDOM要素に変換

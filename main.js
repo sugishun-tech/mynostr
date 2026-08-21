@@ -14,6 +14,7 @@ app.init = async function() {
   await this.loadSettings();
   this.connectRelays();
   this.updateBatchDisplay();
+  await this.initRouting();
 };
 
 
