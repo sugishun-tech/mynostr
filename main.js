@@ -1,8 +1,8 @@
 import { app } from './appCore.js';
 import './settings.js';
-import './network.js';
+import './network.js?20260831-relay-v1';
 import './auth.js';
-import './actions.js';
+import './actions.js?20260831-relay-v1';
 import './feed.js';
 import './profile.js';
 import './utils.js';

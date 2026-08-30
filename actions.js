@@ -15,14 +15,17 @@ app.submitPost = async function() {
   };
   try {
     const signedEvent = await window.nostr.signEvent(event);
-    this.broadcast(signedEvent);
+    await this.broadcast(signedEvent);
     inputArea.value = '';
     this.eventStorage.set(signedEvent.id, signedEvent);
     const currentTab = this.getCurrentTab();
     if (currentTab === 'home' || currentTab === 'public') {
       this.renderPost(signedEvent, true);
     }
-  } catch (e) { alert("投稿に失敗しました"); }
+  } catch (e) {
+    console.error("投稿の送信に失敗しました", e);
+    alert("投稿に失敗しました");
+  }
 };
 
 app.submitReply = async function() {
@@ -48,13 +51,16 @@ app.submitReply = async function() {
   const event = { kind: 1, created_at: Math.floor(Date.now() / 1000), tags: tags, content: content };
   try {
     const signedEvent = await window.nostr.signEvent(event);
-    this.broadcast(signedEvent);
+    await this.broadcast(signedEvent);
     inputArea.value = '';
     this.eventStorage.set(signedEvent.id, signedEvent);
     
     // URL上の対象スレッドは変えず、内容だけ再取得する。
     this.loadThread(threadId);
-  } catch (e) { alert("返信に失敗しました"); }
+  } catch (e) {
+    console.error("返信の送信に失敗しました", e);
+    alert("返信に失敗しました");
+  }
 };
 
 app.toggleLike = async function(id, pubkey) {
@@ -70,11 +76,14 @@ app.toggleLike = async function(id, pubkey) {
   };
   try {
     const signed = await window.nostr.signEvent(ev);
-    this.broadcast(signed);
+    await this.broadcast(signed);
     this.likedIds.add(id);
     document.querySelectorAll(`[data-event-id="${id}"] .heart-btn`).forEach(btn => {
       btn.innerHTML = '♥';
       btn.classList.add('liked');
     });
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error("いいねの送信に失敗しました", e);
+    alert("いいねの送信に失敗しました");
+  }
 };

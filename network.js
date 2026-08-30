@@ -7,51 +7,144 @@ app._eventTimer = app._eventTimer || null;
 
 app.connectRelays = function() {};
 
-app.broadcast = async function(signedEvent) {
-  console.log("Broadcasting to:", this.relayUrls);
+const DEFAULT_PUBLISH_TIMEOUT_MS = 8000;
 
-  if (!this.relayUrls || this.relayUrls.length === 0) {
-    console.error("No relays configured.");
-    return;
-  }
-
-  try {
-    await Promise.any(this.pool.publish(this.relayUrls, signedEvent));
-    console.log("[SUCCESS] Event published successfully to at least one relay.");
-  } catch (e) {
-    console.error("[FAILED] Could not publish to any relay:", e);
-    throw e;
-  }
+app._getPublishRelayUrls = function() {
+  return Array.from(new Set(
+    (Array.isArray(this.relayUrls) ? this.relayUrls : [])
+      .map(url => String(url).trim())
+      .filter(Boolean)
+  ));
 };
 
-app.broadcast_old = async function(signedEvent) {
-  if (!this.relayUrls || this.relayUrls.length === 0) {
-    console.error("Relay URLs are empty.");
-    throw new Error("リレーが設定されていません");
+app._publishWithTimeout = function(publishPromise, relayUrl, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let finished = false;
+
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      reject(new Error(`${relayUrl}: ${timeoutMs}ms以内に応答がありませんでした`));
+    }, timeoutMs);
+
+    Promise.resolve(publishPromise).then(
+      () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve(relayUrl);
+      },
+      (error) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        const reason = error instanceof Error
+          ? error.message
+          : String(error || '送信を拒否されました');
+        reject(new Error(`${relayUrl}: ${reason}`));
+      }
+    );
+  });
+};
+
+/**
+ * 署名済みイベントを、設定された全リレーへ同時に複製送信する。
+ * 1つ以上のリレーが受理した時点で呼び出し元へ成功を返すが、
+ * 残りのリレーへの送信も中断せず、各結果をコンソールへ記録する。
+ */
+app.broadcast = async function(signedEvent) {
+  const relayUrls = this._getPublishRelayUrls();
+
+  if (relayUrls.length === 0) {
+    const error = new Error('送信先リレーが設定されていません');
+    console.error('[PUBLISH FAILED]', error);
+    throw error;
   }
 
-  console.log("Broadcasting event:", signedEvent);
-  const pubs = this.pool.publish(this.relayUrls, signedEvent);
-  const promises = pubs.map(pub => {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Timeout")), 5000);
-      pub.on('ok', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      pub.on('failed', (reason) => {
-        clearTimeout(timeout);
-        reject(new Error(reason));
-      });
+  if (!signedEvent || !signedEvent.id) {
+    const error = new Error('署名済みイベントが不正です');
+    console.error('[PUBLISH FAILED]', error);
+    throw error;
+  }
+
+  console.log(
+    `[PUBLISH START] kind=${signedEvent.kind} id=${signedEvent.id} relays=${relayUrls.length}`,
+    relayUrls
+  );
+
+  let publishPromises;
+  try {
+    // nostr-tools 1.17.0 の SimplePool.publish() は、
+    // リレーごとの Promise を一括生成し、全リレーへの送信を同時に開始する。
+    publishPromises = this.pool.publish(relayUrls, signedEvent);
+  } catch (error) {
+    console.error('[PUBLISH FAILED] 送信開始に失敗しました', error);
+    throw error;
+  }
+
+  if (!Array.isArray(publishPromises) || publishPromises.length !== relayUrls.length) {
+    const error = new Error('リレー送信処理の戻り値が想定外です');
+    console.error('[PUBLISH FAILED]', error);
+    throw error;
+  }
+
+  const configuredTimeout = Number(this.publishTimeoutMs);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : DEFAULT_PUBLISH_TIMEOUT_MS;
+
+  const attempts = publishPromises.map((promise, index) => (
+    this._publishWithTimeout(promise, relayUrls[index], timeoutMs)
+  ));
+
+  // 全結果の記録は、最初の成功を呼び出し元へ返した後も継続する。
+  const completion = Promise.allSettled(attempts).then(results => {
+    const succeeded = [];
+    const failed = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        succeeded.push(relayUrls[index]);
+      } else {
+        failed.push({
+          relay: relayUrls[index],
+          reason: result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason)
+        });
+      }
     });
+
+    console.log(
+      `[PUBLISH COMPLETE] success=${succeeded.length}/${relayUrls.length}`,
+      { succeeded, failed }
+    );
+
+    return { succeeded, failed };
   });
 
   try {
-    await Promise.any(promises);
-    console.log("Broadcast successful at least one relay");
-  } catch (e) {
-    console.error("Broadcast failed on all relays:", e);
-    throw e;
+    const firstAcceptedRelay = await Promise.any(attempts);
+    console.log(`[PUBLISH ACCEPTED] ${firstAcceptedRelay}`);
+
+    // Promise.allSettled が各 rejection を処理するので、未処理例外にはならない。
+    void completion;
+
+    return {
+      firstAcceptedRelay,
+      relayCount: relayUrls.length,
+      completion
+    };
+  } catch (error) {
+    const result = await completion;
+    const details = result.failed.map(item => item.reason).join(' / ');
+    const publishError = new Error(
+      details
+        ? `すべてのリレーへの送信に失敗しました: ${details}`
+        : 'すべてのリレーへの送信に失敗しました'
+    );
+    console.error('[PUBLISH FAILED]', publishError, error);
+    throw publishError;
   }
 };
 
