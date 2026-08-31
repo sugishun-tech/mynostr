@@ -8,6 +8,8 @@ app._eventTimer = app._eventTimer || null;
 app.connectRelays = function() {};
 
 const DEFAULT_PUBLISH_TIMEOUT_MS = 8000;
+const DEFAULT_PUBLISH_RETRY_COUNT = 2;
+const DEFAULT_PUBLISH_RETRY_DELAY_MS = 500;
 
 app._getPublishRelayUrls = function() {
   return Array.from(new Set(
@@ -17,6 +19,10 @@ app._getPublishRelayUrls = function() {
   ));
 };
 
+app._sleep = function(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
 app._publishWithTimeout = function(publishPromise, relayUrl, timeoutMs) {
   return new Promise((resolve, reject) => {
     let finished = false;
@@ -24,7 +30,7 @@ app._publishWithTimeout = function(publishPromise, relayUrl, timeoutMs) {
     const timer = setTimeout(() => {
       if (finished) return;
       finished = true;
-      reject(new Error(`${relayUrl}: ${timeoutMs}ms以内に応答がありませんでした`));
+      reject(new Error(`${timeoutMs}ms以内にOK応答がありませんでした`));
     }, timeoutMs);
 
     Promise.resolve(publishPromise).then(
@@ -40,51 +46,109 @@ app._publishWithTimeout = function(publishPromise, relayUrl, timeoutMs) {
         clearTimeout(timer);
         const reason = error instanceof Error
           ? error.message
-          : String(error || '送信を拒否されました');
-        reject(new Error(`${relayUrl}: ${reason}`));
+          : String(error || '接続または送信に失敗しました');
+        reject(new Error(reason));
       }
     );
   });
 };
 
+app._isDuplicatePublishResult = function(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /^duplicate\s*:/i.test(message.trim());
+};
+
+app._isNonRetryablePublishError = function(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /^(blocked|restricted|invalid|pow)\s*:/i.test(message.trim());
+};
+
+app._publishOnceToRelay = function(relayUrl, signedEvent, timeoutMs) {
+  let publishPromises;
+  try {
+    publishPromises = this.pool.publish([relayUrl], signedEvent);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+
+  if (!Array.isArray(publishPromises) || publishPromises.length !== 1) {
+    return Promise.reject(new Error('リレー送信処理の戻り値が想定外です'));
+  }
+
+  return this._publishWithTimeout(publishPromises[0], relayUrl, timeoutMs);
+};
+
+app._publishToRelayWithRetry = async function(relayUrl, signedEvent, options) {
+  const { timeoutMs, retryCount, retryDelayMs } = options;
+  const maxAttempts = retryCount + 1;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    console.log(
+      `[PUBLISH RELAY TRY] ${relayUrl} attempt=${attempt}/${maxAttempts}`
+    );
+
+    try {
+      await this._publishOnceToRelay(relayUrl, signedEvent, timeoutMs);
+      console.log(
+        `[PUBLISH RELAY OK] ${relayUrl} attempt=${attempt}/${maxAttempts}`
+      );
+      return relayUrl;
+    } catch (error) {
+      // 古い実装のリレーには、保存済みイベントを false + duplicate で返すものもある。
+      // duplicate は「そのリレーに既に存在する」ので、分散保存の目的上は成功扱いにする。
+      if (this._isDuplicatePublishResult(error)) {
+        console.log(
+          `[PUBLISH RELAY OK] ${relayUrl} attempt=${attempt}/${maxAttempts} duplicate`
+        );
+        return relayUrl;
+      }
+
+      lastError = error instanceof Error
+        ? error
+        : new Error(String(error || '接続または送信に失敗しました'));
+
+      const reason = lastError.message || '接続または送信に失敗しました';
+      console.warn(
+        `[PUBLISH RELAY ERROR] ${relayUrl} attempt=${attempt}/${maxAttempts}: ${reason}`
+      );
+
+      if (attempt >= maxAttempts || this._isNonRetryablePublishError(lastError)) {
+        break;
+      }
+
+      const delayMs = retryDelayMs * (2 ** (attempt - 1));
+      console.log(
+        `[PUBLISH RELAY RETRY] ${relayUrl} next=${attempt + 1}/${maxAttempts} delay=${delayMs}ms`
+      );
+      await this._sleep(delayMs);
+    }
+  }
+
+  const reason = lastError && lastError.message
+    ? lastError.message
+    : '接続または送信に失敗しました';
+  throw new Error(`${relayUrl}: ${reason}`);
+};
+
 /**
  * 署名済みイベントを、設定された全リレーへ同時に複製送信する。
- * 1つ以上のリレーが受理した時点で呼び出し元へ成功を返すが、
- * 残りのリレーへの送信も中断せず、各結果をコンソールへ記録する。
+ * 各リレーは独立して再送するため、1台の障害が他のリレー送信を止めない。
+ * 1つ以上のリレーが受理した時点で呼び出し元へ成功を返し、
+ * 残りのリレーへの再送はバックグラウンドで最後まで継続する。
  */
 app.broadcast = async function(signedEvent) {
   const relayUrls = this._getPublishRelayUrls();
 
   if (relayUrls.length === 0) {
     const error = new Error('送信先リレーが設定されていません');
-    console.error('[PUBLISH FAILED]', error);
+    console.error('[PUBLISH FAILED]', error.message);
     throw error;
   }
 
   if (!signedEvent || !signedEvent.id) {
     const error = new Error('署名済みイベントが不正です');
-    console.error('[PUBLISH FAILED]', error);
-    throw error;
-  }
-
-  console.log(
-    `[PUBLISH START] kind=${signedEvent.kind} id=${signedEvent.id} relays=${relayUrls.length}`,
-    relayUrls
-  );
-
-  let publishPromises;
-  try {
-    // nostr-tools 1.17.0 の SimplePool.publish() は、
-    // リレーごとの Promise を一括生成し、全リレーへの送信を同時に開始する。
-    publishPromises = this.pool.publish(relayUrls, signedEvent);
-  } catch (error) {
-    console.error('[PUBLISH FAILED] 送信開始に失敗しました', error);
-    throw error;
-  }
-
-  if (!Array.isArray(publishPromises) || publishPromises.length !== relayUrls.length) {
-    const error = new Error('リレー送信処理の戻り値が想定外です');
-    console.error('[PUBLISH FAILED]', error);
+    console.error('[PUBLISH FAILED]', error.message);
     throw error;
   }
 
@@ -93,11 +157,29 @@ app.broadcast = async function(signedEvent) {
     ? configuredTimeout
     : DEFAULT_PUBLISH_TIMEOUT_MS;
 
-  const attempts = publishPromises.map((promise, index) => (
-    this._publishWithTimeout(promise, relayUrls[index], timeoutMs)
+  const configuredRetryCount = Number(this.publishRetryCount);
+  const retryCount = Number.isInteger(configuredRetryCount) && configuredRetryCount >= 0
+    ? configuredRetryCount
+    : DEFAULT_PUBLISH_RETRY_COUNT;
+
+  const configuredRetryDelay = Number(this.publishRetryDelayMs);
+  const retryDelayMs = Number.isFinite(configuredRetryDelay) && configuredRetryDelay >= 0
+    ? configuredRetryDelay
+    : DEFAULT_PUBLISH_RETRY_DELAY_MS;
+
+  console.log(
+    `[PUBLISH START] kind=${signedEvent.kind} id=${signedEvent.id} relays=${relayUrls.length} attempts=${retryCount + 1}`,
+    relayUrls
+  );
+
+  const options = { timeoutMs, retryCount, retryDelayMs };
+  const attempts = relayUrls.map(relayUrl => (
+    this._publishToRelayWithRetry(relayUrl, signedEvent, options)
   ));
 
-  // 全結果の記録は、最初の成功を呼び出し元へ返した後も継続する。
+  // Promise.any を先に登録し、「ACCEPTED」が「COMPLETE」より後に見える紛らわしい順序を避ける。
+  const firstAcceptance = Promise.any(attempts);
+
   const completion = Promise.allSettled(attempts).then(results => {
     const succeeded = [];
     const failed = [];
@@ -115,19 +197,24 @@ app.broadcast = async function(signedEvent) {
       }
     });
 
-    console.log(
-      `[PUBLISH COMPLETE] success=${succeeded.length}/${relayUrls.length}`,
-      { succeeded, failed }
-    );
+    const summary = `[PUBLISH COMPLETE] success=${succeeded.length}/${relayUrls.length}`;
+    if (failed.length > 0) {
+      console.warn(summary);
+      failed.forEach(item => {
+        console.warn(`[PUBLISH FAILED RELAY] ${item.relay}: ${item.reason}`);
+      });
+    } else {
+      console.log(summary);
+    }
 
     return { succeeded, failed };
   });
 
   try {
-    const firstAcceptedRelay = await Promise.any(attempts);
+    const firstAcceptedRelay = await firstAcceptance;
     console.log(`[PUBLISH ACCEPTED] ${firstAcceptedRelay}`);
 
-    // Promise.allSettled が各 rejection を処理するので、未処理例外にはならない。
+    // completion が rejection をすべて回収する。呼び出し元は最初の成功でUIを進められる。
     void completion;
 
     return {
@@ -143,7 +230,7 @@ app.broadcast = async function(signedEvent) {
         ? `すべてのリレーへの送信に失敗しました: ${details}`
         : 'すべてのリレーへの送信に失敗しました'
     );
-    console.error('[PUBLISH FAILED]', publishError, error);
+    console.error('[PUBLISH FAILED]', publishError.message, error);
     throw publishError;
   }
 };
